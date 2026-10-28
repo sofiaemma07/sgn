@@ -1,126 +1,38 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import Toast from "@/components/Toast";
-import { label, cursoLabel } from "@/lib/presentation";
+import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
-import type { Curso, Usuario } from "@/lib/types";
+import type { Curso, Perfil } from "@/lib/types";
+import PadronAlumnos from "@/components/PadronAlumnos";
+import MatriculacionMasiva from "@/components/MatriculacionMasiva";
+
+type Modulo = "padron" | "matriculacion";
 
 export default function OficinaAlumnosPage() {
-  const [alumnos, setAlumnos] = useState<Usuario[]>([]);
+  const [modulo, setModulo] = useState<Modulo>("padron");
   const [cursos, setCursos] = useState<Curso[]>([]);
+  const [anioActivo, setAnioActivo] = useState(new Date().getFullYear());
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
-  const [insc, setInsc] = useState({ legajo: "", cursoId: 0, anio: 2026 });
 
   useEffect(() => {
-    Promise.all([api.usuarios("ALUMNO"), api.cursos()])
-      .then(([a, c]) => {
-        setAlumnos(a);
-        setCursos(c);
-        if (c.length) setInsc((i) => ({ ...i, cursoId: c[0].id }));
-      })
-      .catch((e) => setErr(e.message));
+    Promise.all([api.cursos(), api.me()])
+      .then(([data, perfil]) => { setCursos(data); setAnioActivo(perfil.anioLectivo); })
+      .catch(e => setErr(e.message)).finally(() => setLoading(false));
   }, []);
 
-  async function asignar(e: FormEvent) {
-    e.preventDefault();
-    setErr("");
-    try {
-      await api.inscribir(insc);
-      setOk("Alumno inscripto al curso");
-    } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "Error");
-    }
-  }
-
-  return (
-    <Guard roles={["OFICINA", "ADMIN"]}>
-      <Shell>
-        <h1>Gestión de alumnos</h1>
-        {err && <div className="alert alert-error">{err}</div>}
-        {ok && <Toast message={ok} onClose={() => setOk("")}/>}
-
-        <div className="panel">
-          <h2>Asignar alumno a curso</h2>
-          <form className="form" onSubmit={asignar}>
-            <div className="field">
-              <label htmlFor="field-1">Legajo</label>
-              <input id="field-1"
-                value={insc.legajo}
-                onChange={(e) => setInsc({ ...insc, legajo: e.target.value })}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="field-2">Curso</label>
-              <select id="field-2"
-                value={insc.cursoId}
-                onChange={(e) =>
-                  setInsc({ ...insc, cursoId: Number(e.target.value) })
-                }
-              >
-                {cursos.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {cursoLabel(c.etiqueta)} — {label(c.esp)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="field-3">Año lectivo</label>
-              <input id="field-3"
-                type="number"
-                value={insc.anio}
-                onChange={(e) => setInsc({ ...insc, anio: Number(e.target.value) })}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary">
-              Inscribir
-            </button>
-          </form>
-        </div>
-
-        <h2>Alumnos registrados</h2>
-        <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Legajo</th>
-                <th>Nombre</th>
-                <th>Mail</th>
-                <th>Activo</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {alumnos.map((a) => (
-                <tr key={a.legajo}>
-                  <td className="numeric">{a.legajo}</td>
-                  <td>
-                    {a.nom} {a.nom2} {a.ape} {a.ape2}
-                  </td>
-                  <td>{a.mail}</td>
-                  <td>{a.activo ? "Sí" : "No"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() =>
-                        api.downloadBoletinAlumno(a.legajo).catch((e) => setErr(e.message))
-                      }
-                    >
-                      PDF
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Shell>
-    </Guard>
-  );
+  return <Guard roles={["OFICINA", "ADMIN"]}><Shell>
+    <p className="eyebrow">Administración escolar</p>
+    <h1>Gestión de alumnos</h1>
+    <p className="card-meta">Consultá el padrón y organizá la matriculación por curso y ciclo lectivo.</p>
+    {err && <div className="alert alert-error">{err}</div>}
+    <div className="roster-tabs" role="tablist" aria-label="Módulos de gestión de alumnos">
+      <button type="button" role="tab" aria-selected={modulo === "padron"} className={modulo === "padron" ? "is-active" : ""} onClick={() => setModulo("padron")}>Padrón general</button>
+      <button type="button" role="tab" aria-selected={modulo === "matriculacion"} className={modulo === "matriculacion" ? "is-active" : ""} onClick={() => setModulo("matriculacion")}>Matriculación y armado de cursos</button>
+    </div>
+    {loading ? <section className="panel"><p className="empty">Cargando cursos…</p></section>
+      : modulo === "padron" ? <PadronAlumnos cursos={cursos} anioInicial={anioActivo}/> : <MatriculacionMasiva cursos={cursos} anioInicial={anioActivo}/>}
+  </Shell></Guard>;
 }

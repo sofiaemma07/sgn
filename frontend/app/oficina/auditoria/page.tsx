@@ -13,7 +13,9 @@ export default function AuditoriaPage() {
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    api.auditoria().then(setItems).catch((e) => setErr(e.message));
+    api.auditoria()
+      .then(movimientos => setItems(movimientos.filter(a => a.accion !== "BORRADOR" && a.est !== "EN_BORRADOR")))
+      .catch((e) => setErr(e.message));
   }, []);
 
   return (

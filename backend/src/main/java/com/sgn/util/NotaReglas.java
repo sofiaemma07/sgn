@@ -1,6 +1,7 @@
 package com.sgn.util;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 
 public final class NotaReglas {
@@ -12,9 +13,16 @@ public final class NotaReglas {
         if (val == null || val.compareTo(BigDecimal.ONE) < 0 || val.compareTo(BigDecimal.TEN) > 0) {
             throw new IllegalArgumentException("La nota debe estar entre 1 y 10");
         }
-        if (val.scale() > 2) {
-            throw new IllegalArgumentException("Máximo 2 decimales");
+    }
+
+    public static BigDecimal redondearVal(BigDecimal val) {
+        if (val == null) throw new IllegalArgumentException("La nota es obligatoria");
+        if (val.compareTo(BigDecimal.ONE) < 0 || val.compareTo(BigDecimal.TEN) > 0) {
+            throw new IllegalArgumentException("La nota debe estar entre 1 y 10");
         }
+        BigDecimal redondeada = val.setScale(0, RoundingMode.HALF_UP);
+        validarVal(redondeada);
+        return redondeada;
     }
 
 

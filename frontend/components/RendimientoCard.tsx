@@ -1,12 +1,14 @@
 import type { Rendimiento } from "@/lib/types";
+import type { Bloque } from "@/lib/types";
 import { label } from "@/lib/presentation";
 import StatusBadge from "./StatusBadge";
+import Link from "next/link";
 
-export default function RendimientoCard({ rend }: { rend: Rendimiento }) {
+export default function RendimientoCard({ rend, bloques }: { rend: Rendimiento; bloques: Bloque[] }) {
   const aprobadas = rend.materias.filter(m => m.est === "APROBADA").length;
   const sinNotas = rend.materias.filter(m => m.est === "SIN_NOTAS").length;
   const enCurso = rend.materias.length - aprobadas - sinNotas;
-  const conNotas = rend.materias.some(m => m.est !== "SIN_NOTAS");
+  const conNotas = rend.materias.some(m => m.pct > 0);
 
   return (
     <section className="panel" aria-labelledby="performance-title">
@@ -24,14 +26,20 @@ export default function RendimientoCard({ rend }: { rend: Rendimiento }) {
         <div>
           <h2>Por materia</h2>
           {rend.materias.length === 0 && <p className="card-meta">Todavía no hay materias para mostrar.</p>}
-          {rend.materias.map(m => (
-            <div className="rend-row" key={m.materia}>
+          {rend.materias.map(m => {
+            const bloque = bloques.find(b => b.materia.localeCompare(m.materia, "es", { sensitivity: "base" }) === 0);
+            const contenido = <>
               <span className="rend-label">{m.materia}</span>
-              <span className="numeric">{m.est === "SIN_NOTAS" ? "—" : m.promNoOf.toFixed(2)}</span>
+              <span className="numeric">{m.pct === 0 ? "—" : m.promNoOf.toFixed(2)}</span>
               <StatusBadge status={m.est} />
               <div className="rend-bar" aria-hidden="true"><div className="rend-fill" style={{ width: Math.max(0, Math.min(100, m.pct)) + "%" }} /></div>
-            </div>
-          ))}
+            </>;
+            return bloque
+              ? <Link href={`/alumno/materia/${bloque.id}`} className="rend-row rend-row-link" key={`${m.materia}-${bloque.id}`} aria-label={`Ver notas de ${m.materia}`}>
+                  {contenido}
+                </Link>
+              : <div className="rend-row" key={m.materia}>{contenido}</div>;
+          })}
         </div>
       </div>
       {rend.periodos.length > 0 && (

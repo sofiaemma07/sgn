@@ -27,8 +27,14 @@ public class Solicitud {
     @Column(precision = 4, scale = 2)
     private BigDecimal valActual;
 
+    @Column(name = "val_actual_txt", length = 12)
+    private String valActualTexto;
+
     @Column(precision = 4, scale = 2)
     private BigDecimal valNuevo;
+
+    @Column(name = "val_nuevo_txt", length = 12)
+    private String valNuevoTexto;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -43,6 +49,10 @@ public class Solicitud {
     @JoinColumn(name = "autorizo_legajo")
     private Usuario autorizo;
 
+    @ManyToOne
+    @JoinColumn(name = "reporte_id")
+    private Reporte reporte;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Nota getNota() { return nota; }
@@ -53,8 +63,12 @@ public class Solicitud {
     public void setMotivo(String motivo) { this.motivo = motivo; }
     public BigDecimal getValActual() { return valActual; }
     public void setValActual(BigDecimal valActual) { this.valActual = valActual; }
+    public String getValActualTexto() { return valActualTexto; }
+    public void setValActualTexto(String valActualTexto) { this.valActualTexto = valActualTexto; }
     public BigDecimal getValNuevo() { return valNuevo; }
     public void setValNuevo(BigDecimal valNuevo) { this.valNuevo = valNuevo; }
+    public String getValNuevoTexto() { return valNuevoTexto; }
+    public void setValNuevoTexto(String valNuevoTexto) { this.valNuevoTexto = valNuevoTexto; }
     public EstSol getEst() { return est; }
     public void setEst(EstSol est) { this.est = est; }
     public LocalDateTime getFecSol() { return fecSol; }
@@ -63,4 +77,6 @@ public class Solicitud {
     public void setFecRes(LocalDateTime fecRes) { this.fecRes = fecRes; }
     public Usuario getAutorizo() { return autorizo; }
     public void setAutorizo(Usuario autorizo) { this.autorizo = autorizo; }
+    public Reporte getReporte() { return reporte; }
+    public void setReporte(Reporte reporte) { this.reporte = reporte; }
 }

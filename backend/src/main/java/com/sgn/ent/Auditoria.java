@@ -27,11 +27,20 @@ public class Auditoria {
     @Column(length = 120)
     private String materia;
 
+    @Column(length = 80)
+    private String periodo;
+
     @Column(precision = 4, scale = 2)
     private BigDecimal valAnt;
 
     @Column(precision = 4, scale = 2)
     private BigDecimal valNuevo;
+
+    @Column(name = "val_ant_txt", length = 12)
+    private String valAntTxt;
+
+    @Column(name = "val_nuevo_txt", length = 12)
+    private String valNuevoTxt;
 
     @Column(length = 500)
     private String motivo;
@@ -55,10 +64,16 @@ public class Auditoria {
     public void setAlumno(Usuario alumno) { this.alumno = alumno; }
     public String getMateria() { return materia; }
     public void setMateria(String materia) { this.materia = materia; }
+    public String getPeriodo() { return periodo; }
+    public void setPeriodo(String periodo) { this.periodo = periodo; }
     public BigDecimal getValAnt() { return valAnt; }
     public void setValAnt(BigDecimal valAnt) { this.valAnt = valAnt; }
     public BigDecimal getValNuevo() { return valNuevo; }
     public void setValNuevo(BigDecimal valNuevo) { this.valNuevo = valNuevo; }
+    public String getValAntTxt() { return valAntTxt; }
+    public void setValAntTxt(String valAntTxt) { this.valAntTxt = valAntTxt; }
+    public String getValNuevoTxt() { return valNuevoTxt; }
+    public void setValNuevoTxt(String valNuevoTxt) { this.valNuevoTxt = valNuevoTxt; }
     public String getMotivo() { return motivo; }
     public void setMotivo(String motivo) { this.motivo = motivo; }
     public String getAccion() { return accion; }

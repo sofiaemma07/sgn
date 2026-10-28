@@ -80,8 +80,7 @@ class NotaSrvAccesoTest {
         var prof = new Usuario();
         prof.setLegajo("D001");
         prof.setTipo(TipoUsr.PROFESOR);
-        var req = new com.sgn.dto.Dtos.SolReq(1L, "  ", java.math.BigDecimal.TEN);
-        assertThrows(IllegalArgumentException.class, () -> srv.solCambio(req, prof));
+        var req = new com.sgn.dto.Dtos.SolReq(1L, "  ", "10");        assertThrows(IllegalArgumentException.class, () -> srv.solCambio(req, prof));
     }
 
     @Test

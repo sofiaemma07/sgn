@@ -2,79 +2,81 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Toast from "@/components/Toast";
-import { label, cursoLabel } from "@/lib/presentation";
+import { cursoLabel, dateLabel } from "@/lib/presentation";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
-import type { Nota } from "@/lib/types";
+import type { Alumno, Bloque, Nota } from "@/lib/types";
 
-const PERIODOS: Record<string, number[]> = {
-  PRUEBA: [1, 2, 3, 4],
-  TRABAJO: [1, 2, 3, 4],
-  BIM: [1, 2, 3, 4],
-  CUAT: [1, 2],
-  DIC: [1],
-  FEB: [1],
-  FINAL: [1],
-};
+const ETAPAS = [
+  { fase: "BIM_1", titulo: "1° Bimestre" },
+  { fase: "BIM_2", titulo: "2° Bimestre" },
+  { fase: "FINAL_1", titulo: "FINAL · 1° Cuatrimestre" },
+  { fase: "BIM_3", titulo: "3° Bimestre" },
+  { fase: "BIM_4", titulo: "4° Bimestre" },
+  { fase: "FINAL_2", titulo: "FINAL · 2° Cuatrimestre" },
+  { fase: "CIERRE_1", titulo: "1° Cierre · Diciembre" },
+  { fase: "CIERRE_2", titulo: "2° Cierre · Febrero" },
+  { fase: "CIERRE_3", titulo: "3° Cierre · Marzo" },
+  { fase: "CALIF_DEF", titulo: "Calif. Def." },
+];
+
+function faseNota(nota: Nota) {
+  if (nota.tipo === "BIM" && nota.numPer >= 1 && nota.numPer <= 4) return `BIM_${nota.numPer}`;
+  if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 1) return "FINAL_1";
+  if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 2) return "FINAL_2";
+  if (nota.tipo === "FINAL" && nota.numPer === 3) return "CALIF_DEF";
+  if (nota.tipo === "DIC") return "CIERRE_1";
+  if (nota.tipo === "FEB" && nota.numPer === 1) return "CIERRE_2";
+  if (nota.tipo === "FEB" && nota.numPer === 2) return "CIERRE_3";
+  return null;
+}
 
 export default function AlumnoNotasPage() {
   const { id, legajo } = useParams<{ id: string; legajo: string }>();
   const bloqueId = Number(id);
   const [notas, setNotas] = useState<Nota[]>([]);
+  const [fasesEntregadas, setFasesEntregadas] = useState<Set<string>>(new Set());
+  const [alumno, setAlumno] = useState<Alumno | null>(null);
+  const [bloque, setBloque] = useState<Bloque | null>(null);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-  const [tab, setTab] = useState("BIM");
-  const [form, setForm] = useState({
-    tipo: "PRUEBA",
-    numPer: 1,
-    titulo: "",
-    val: "",
-  });
   const [modNota, setModNota] = useState<Nota | null>(null);
   const [modVal, setModVal] = useState("");
   const [modMot, setModMot] = useState("");
 
   function load() {
     api.notas(bloqueId, legajo).then(setNotas).catch((e) => setErr(e.message));
+    Promise.all([api.alumnos(bloqueId), api.bloquesProf()])
+      .then(([alumnos, bloques]) => {
+        setAlumno(alumnos.find(a => a.legajo === legajo) || null);
+        setBloque(bloques.find(b => b.id === bloqueId) || null);
+      })
+      .catch((e) => setErr(e.message));
+    api.planillaCompleta(bloqueId)
+      .then(planilla => setFasesEntregadas(new Set(planilla.fases.filter(f => f.estado === "CERRADA").map(f => f.fase))))
+      .catch(() => setFasesEntregadas(new Set()));
   }
 
   useEffect(() => {
     load();
   }, [bloqueId, legajo]);
 
-  async function cargar(e: FormEvent) {
-    e.preventDefault();
-    setErr("");
-    setOk("");
-    try {
-      await api.cargarNota({
-        bloqueId,
-        legajo: legajo,
-        tipo: form.tipo,
-        numPer: form.numPer,
-        titulo: form.titulo || null,
-        val: parseFloat(form.val),
-      });
-      setOk("Nota cargada");
-      setForm({ ...form, titulo: "", val: "" });
-      load();
-    } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "Error");
-    }
-  }
-
   async function solicitar(e: FormEvent) {
     e.preventDefault();
     if (!modNota) return;
     setErr("");
+    if (!modMot.trim()) {
+      setErr("El motivo de la solicitud es obligatorio");
+      return;
+    }
     try {
       await api.solicitar({
         notaId: modNota.id,
         motivo: modMot,
-        valNuevo: parseFloat(modVal),
+        valNuevo: modVal,
       });
       setOk("Solicitud enviada a oficina de alumnos");
       setModNota(null);
@@ -83,143 +85,68 @@ export default function AlumnoNotasPage() {
     }
   }
 
-  const filtradas = notas.filter((n) => {
-    if (tab === "DET") return n.tipo === "PRUEBA" || n.tipo === "TRABAJO";
-    return n.tipo === tab;
-  });
+  // Never show drafts. For older API responses without the flag, only show
+  // phases that the planilla API confirms were delivered.
+  const notasPlanilla = notas.filter(n => {
+    const fase = faseNota(n);
+    return fase !== null && n.borrador !== true && (n.borrador === false || fasesEntregadas.has(fase));
+  })
+    .sort((a, b) => ETAPAS.findIndex(f => f.fase === faseNota(a)) - ETAPAS.findIndex(f => f.fase === faseNota(b))
+      || (a.fecCarga || "").localeCompare(b.fecCarga || ""));
+  const ultimaFase = Math.max(-1, ...notasPlanilla.map(n => ETAPAS.findIndex(f => f.fase === faseNota(n))));
+  function etapa(nota: Nota) {
+    return ETAPAS.find(f => f.fase === faseNota(nota))?.titulo || "";
+  }
+  function habilitaSolicitud(nota: Nota) {
+    const valorValido = /^\d+$/.test(nota.val) || ["EP", "NI", "NC"].includes(nota.val);
+    return ETAPAS.findIndex(f => f.fase === faseNota(nota)) === ultimaFase && nota.borrador === false && valorValido;
+  }
 
   return (
     <Guard roles={["PROFESOR"]}>
       <Shell>
-        <h1>Notas del alumno</h1>
         <p className="card-meta">
           <Link href={`/profesor/bloque/${id}`}>← Volver a alumnos</Link>
         </p>
+        <h1>Notas de {alumno?.nomCompleto || `alumno ${legajo}`}</h1>
+        <p className="card-meta">{bloque ? <>{bloque.materia} · {cursoLabel(bloque.curso)}</> : `Legajo ${legajo}`}</p>
+        <p className="card-meta">Se muestran las notas de la planilla. Solo la fase más reciente entregada permite solicitar una modificación.</p>
         {err && <div className="alert alert-error">{err}</div>}
         {ok && <Toast message={ok} onClose={() => setOk("")}/>}
-
-        <div className="tabs">
-          {["DET", "BIM", "CUAT", "DIC", "FEB", "FINAL"].map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`tab ${tab === t ? "active" : ""}`}
-              onClick={() => setTab(t)}
-            >
-              {t === "DET" ? "Pruebas/Trabajos" : t}
-            </button>
-          ))}
-        </div>
-
-        <div className="panel">
-          <h2>Cargar nota</h2>
-          <form className="form form-wide" onSubmit={cargar}>
-            <div className="field">
-              <label htmlFor="field-1">Tipo</label>
-              <select id="field-1"
-                value={form.tipo}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    tipo: e.target.value,
-                    numPer: 1,
-                  })
-                }
-              >
-                <option value="PRUEBA">Prueba</option>
-                <option value="TRABAJO">TP</option>
-                <option value="BIM">Bimestre</option>
-                <option value="CUAT">Cuatrimestre</option>
-                <option value="DIC">Diciembre</option>
-                <option value="FEB">Febrero</option>
-                <option value="FINAL">Final</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="field-2">Período</label>
-              <select id="field-2"
-                value={form.numPer}
-                onChange={(e) => setForm({ ...form, numPer: Number(e.target.value) })}
-              >
-                {(PERIODOS[form.tipo] || [1]).map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {(form.tipo === "PRUEBA" || form.tipo === "TRABAJO") && (
-              <div className="field">
-                <label htmlFor="field-3">Descripción</label>
-                <input id="field-3"
-                  value={form.titulo}
-                  onChange={(e) => setForm({ ...form, titulo: e.target.value })}
-                  placeholder="Ej: Parcial 1"
-                  required
-                />
-              </div>
-            )}
-            <div className="field">
-              <label htmlFor="field-4">Nota</label>
-              <input id="field-4"
-                type="number"
-                step="0.01"
-                min="1"
-                max="10"
-                value={form.val}
-                onChange={(e) => setForm({ ...form, val: e.target.value })}
-                required
-              />
-            </div>
-            <button type="submit" className="btn btn-primary">
-              Cargar
-            </button>
-          </form>
-        </div>
 
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th>Período</th>
-                <th>Detalle</th>
+                <th>Etapa</th>
                 <th>Nota</th>
+                <th>Fecha de carga</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {filtradas.map((n) => (
+              {notasPlanilla.map((n) => (
                 <tr key={n.id}>
-                  <td>{label(n.tipo)}</td>
-                  <td className="numeric">{n.numPer}</td>
-                  <td>{n.titulo || "—"}</td>
+                  <td>{etapa(n)}</td>
                   <td>
                     {n.est === "EN_PROCESO" ? (
-                      <span className="badge badge-warn">En proceso</span>
+                      <span className="badge badge-warn">{n.val === "EP" ? "EP · En proceso" : n.val}</span>
                     ) : (
                       n.val
                     )}
                   </td>
+                  <td>{dateLabel(n.fecCarga)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() => {
-                        setModNota(n);
-                        setModVal("");
-                        setModMot("");
-                      }}
-                    >
-                      Modificar
-                    </button>
+                    {habilitaSolicitud(n) && <button type="button" className="btn btn-sm" onClick={() => {
+                      setModNota(n); setModVal(""); setModMot("");
+                    }}>Solicitar modificación</button>}
                   </td>
                 </tr>
               ))}
-              {filtradas.length === 0 && (
+              {notasPlanilla.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
-                    Sin notas en esta sección
+                  <td colSpan={4} className="empty">
+                    Todavía no hay notas de la planilla cargadas
                   </td>
                 </tr>
               )}
@@ -229,22 +156,18 @@ export default function AlumnoNotasPage() {
 
         {modNota && (
           <div className="panel">
-            <h2>Solicitar cambio — nota actual: {modNota.val}</h2>
+            <h2>Solicitar cambio — {etapa(modNota)} · nota actual: {modNota.val}</h2>
             <form className="form" onSubmit={solicitar}>
               <div className="field">
                 <label htmlFor="field-5">Nueva nota</label>
-                <input id="field-5"
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  max="10"
-                  value={modVal}
-                  onChange={(e) => setModVal(e.target.value)}
-                  required
-                />
+                <select id="field-5" value={modVal} onChange={(e) => setModVal(e.target.value)} required>
+                  <option value="">Seleccioná una nota</option>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+                  <option value="EP">EP · En proceso</option><option value="NI">NI · No inició</option><option value="NC">NC · No corresponde</option>
+                </select>
               </div>
               <div className="field">
-                <label htmlFor="field-6">Motivo</label>
+                <label htmlFor="field-6">Motivo de la solicitud <span aria-hidden="true">*</span></label>
                 <textarea id="field-6"
                   value={modMot}
                   onChange={(e) => setModMot(e.target.value)}

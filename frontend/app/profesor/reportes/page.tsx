@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Toast from "@/components/Toast";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
@@ -8,36 +9,62 @@ import { api } from "@/lib/api";
 import type { Reporte } from "@/lib/types";
 
 export default function ReportesProfPage() {
+  const searchParams = useSearchParams();
+  const reporteId = Number(searchParams.get("reporteId")) || null;
   const [items, setItems] = useState<Reporte[]>([]);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [sel, setSel] = useState<Reporte | null>(null);
   const [val, setVal] = useState("");
   const [mot, setMot] = useState("");
+  const [closing, setClosing] = useState(0);
 
   function load() {
     api.reportesProf().then(setItems).catch((e) => setErr(e.message));
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    api.reportesProf().then(data => {
+      setItems(data);
+      const target = data.find(r => r.id === reporteId);
+      if (target) setSel(target);
+    }).catch((e) => setErr(e.message));
+  }, [reporteId]);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
     if (!sel) return;
     setErr("");
+    if (!mot.trim()) {
+      setErr("El motivo de la solicitud es obligatorio");
+      return;
+    }
     try {
       await api.repSolicitar(sel.id, {
         notaId: sel.notaId,
         motivo: mot,
-        valNuevo: parseFloat(val),
+        valNuevo: val,
       });
       setOk("Solicitud de cambio enviada a oficina");
       setSel(null);
       load();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Error");
+    }
+  }
+
+  async function cerrarReporte(id: number) {
+    setErr("");
+    setClosing(id);
+    try {
+      await api.cerrarReporte(id);
+      setOk("Reporte cerrado sin solicitar un cambio de nota");
+      if (sel?.id === id) setSel(null);
+      load();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "No se pudo cerrar el reporte");
+    } finally {
+      setClosing(0);
     }
   }
 
@@ -66,13 +93,14 @@ export default function ReportesProfPage() {
                   <td>{r.motivo}</td>
                   <td className="numeric">{r.fecRep?.slice(0, 16)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() => setSel(r)}
-                    >
-                      Solicitar cambio
-                    </button>
+                    <div className="btn-row">
+                      {r.puedeSolicitarCambio && <button type="button" className="btn btn-sm" onClick={() => setSel(r)}>
+                        Solicitar cambio
+                      </button>}
+                      <button type="button" className="btn btn-sm" disabled={closing === r.id} onClick={() => cerrarReporte(r.id)}>
+                        {closing === r.id ? "Cerrando…" : "Cerrar sin cambio"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -92,18 +120,14 @@ export default function ReportesProfPage() {
             <form className="form" onSubmit={enviar}>
               <div className="field">
                 <label htmlFor="field-1">Nueva nota</label>
-                <input id="field-1"
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  max="10"
-                  value={val}
-                  onChange={(e) => setVal(e.target.value)}
-                  required
-                />
+                <select id="field-1" value={val} onChange={(e) => setVal(e.target.value)} required>
+                  <option value="">Seleccioná una nota</option>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+                  <option value="EP">EP · En proceso</option><option value="NI">NI · No inició</option><option value="NC">NC · No corresponde</option>
+                </select>
               </div>
               <div className="field">
-                <label htmlFor="field-2">Motivo adicional</label>
+                <label htmlFor="field-2">Motivo de la solicitud <span aria-hidden="true">*</span></label>
                 <textarea id="field-2" value={mot} onChange={(e) => setMot(e.target.value)} required />
               </div>
               <div className="btn-row">

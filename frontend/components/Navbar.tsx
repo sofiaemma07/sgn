@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import { label } from "@/lib/presentation";
 import type { TipoUsuario } from "@/lib/types";
 import { ThemeToggle } from "@/components/Theme";
+import NotificationsMenu from "@/components/NotificationsMenu";
 
 interface LinkItem {
   href: string;
@@ -26,6 +27,7 @@ const NAV: Partial<Record<TipoUsuario, LinkItem[]>> = {
   ],
   OFICINA: [
     { href: "/oficina", label: "Solicitudes" },
+    { href: "/oficina/fases", label: "Fechas de carga" },
     { href: "/oficina/alumnos", label: "Alumnos" },
     { href: "/oficina/notas", label: "Notas" },
     { href: "/oficina/auditoria", label: "Historial" },
@@ -33,6 +35,7 @@ const NAV: Partial<Record<TipoUsuario, LinkItem[]>> = {
   ADMIN: [
     { href: "/admin", label: "Administración" },
     { href: "/oficina", label: "Solicitudes" },
+    { href: "/oficina/fases", label: "Fechas de carga" },
     { href: "/oficina/auditoria", label: "Auditoría" },
   ],
   PRECEPTOR: [{ href: "/otros", label: "Consultar notas" }],
@@ -106,6 +109,7 @@ export default function Navbar() {
             </Link>
           ))}
           </div><ThemeToggle />
+          {(["PROFESOR", "ALUMNO", "OFICINA", "ADMIN"] as TipoUsuario[]).includes(ses.tipo) && <NotificationsMenu />}
           <div className="user-menu" ref={menu} onBlur={event => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
           }}>

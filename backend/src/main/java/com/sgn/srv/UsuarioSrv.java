@@ -3,6 +3,7 @@ package com.sgn.srv;
 import com.sgn.dto.Dtos.*;
 import com.sgn.ent.*;
 import com.sgn.enm.Esp;
+import com.sgn.enm.EstadoAlumno;
 import com.sgn.enm.TipoUsr;
 import com.sgn.enm.Turno;
 import com.sgn.repo.*;
@@ -10,6 +11,8 @@ import com.sgn.util.NotaReglas;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -49,6 +52,131 @@ public class UsuarioSrv {
     public List<UsrRes> listar(TipoUsr tipo) {
         var list = tipo != null ? repo.findByTipo(tipo) : repo.findAll();
         return list.stream().map(this::toRes).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaAlumnos buscarPadron(String q, int anio, Long cursoId, String turnoTxt,
+                                     String espTxt, String estadoTxt, int page, int size) {
+        Turno turno = parseFiltro(turnoTxt, Turno.class);
+        Esp esp = parseFiltro(espTxt, Esp.class);
+        EstadoAlumno estado = parseFiltro(estadoTxt, EstadoAlumno.class);
+        int pageSize = Math.max(1, Math.min(size, 100));
+        var result = repo.buscarPadron(normalizarBusqueda(q), anio, cursoId, turno, esp, estado,
+            PageRequest.of(Math.max(0, page), pageSize, Sort.by("ape").ascending().and(Sort.by("nom").ascending())));
+        var items = mapAlumnosAdmin(result.getContent(), anio);
+        return new PaginaAlumnos(items, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaAlumnos buscarMatriculacion(String q, int anio, long cursoId, boolean disponibles, int page, int size) {
+        int pageSize = Math.max(1, Math.min(size, 100));
+        var result = repo.buscarMatriculacion(normalizarBusqueda(q), anio, cursoId, disponibles,
+            PageRequest.of(Math.max(0, page), pageSize, Sort.by("ape").ascending().and(Sort.by("nom").ascending())));
+        var items = mapAlumnosAdmin(result.getContent(), anio);
+        return new PaginaAlumnos(items, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public String exportarPadron(String q, int anio, Long cursoId, String turno, String especialidad, String estado) {
+        var all = new java.util.ArrayList<AlumnoAdminItem>();
+        int page = 0;
+        PaginaAlumnos result;
+        do {
+            result = buscarPadron(q, anio, cursoId, turno, especialidad, estado, page++, 100);
+            all.addAll(result.items());
+        } while (page < result.pages());
+        var csv = new StringBuilder("Legajo,Apellido y nombre,Correo,Curso,Turno,Especialidad,Estado\r\n");
+        for (var a : all) {
+            csv.append(csv(a.legajo())).append(',').append(csv(a.nombre())).append(',').append(csv(a.mail())).append(',')
+                .append(csv(a.curso())).append(',').append(csv(a.turno())).append(',').append(csv(a.especialidad())).append(',')
+                .append(csv(a.estado() != null ? a.estado().name() : "")).append("\r\n");
+        }
+        return "\uFEFF" + csv;
+    }
+
+    @Transactional
+    public int inscribirMasivo(AsignacionMasivaReq req) {
+        if (req.legajos() == null || req.legajos().isEmpty()) throw new IllegalArgumentException("Seleccioná al menos un alumno");
+        var legajos = req.legajos().stream().filter(s -> s != null && !s.isBlank()).map(String::trim).distinct().toList();
+        for (String legajo : legajos) inscribir(new InscReq(legajo, req.cursoId(), req.anio()));
+        return legajos.size();
+    }
+
+    @Transactional
+    public int desinscribirMasivo(DesasignacionMasivaReq req) {
+        if (req.legajos() == null || req.legajos().isEmpty()) throw new IllegalArgumentException("Seleccioná al menos un alumno");
+        var legajos = req.legajos().stream().filter(s -> s != null && !s.isBlank()).map(String::trim).distinct().toList();
+        for (String legajo : legajos) {
+            inscRepo.findByAlumnoLegajoAndCursoIdAndAnioAndActivaTrue(legajo, req.cursoId(), req.anio())
+                .ifPresent(i -> { i.setActiva(false); inscRepo.save(i); });
+        }
+        return legajos.size();
+    }
+
+    @Transactional
+    public int matricularDisponibles(MatriculacionCursoReq req) {
+        var legajos = legajosMatriculacion(req.anio(), req.cursoId(), true);
+        for (String legajo : legajos) inscribir(new InscReq(legajo, req.cursoId(), req.anio()));
+        return legajos.size();
+    }
+
+    @Transactional
+    public int retirarTodoCurso(MatriculacionCursoReq req) {
+        var legajos = legajosMatriculacion(req.anio(), req.cursoId(), false);
+        for (String legajo : legajos) {
+            inscRepo.findByAlumnoLegajoAndCursoIdAndAnioAndActivaTrue(legajo, req.cursoId(), req.anio())
+                .ifPresent(i -> { i.setActiva(false); inscRepo.save(i); });
+        }
+        return legajos.size();
+    }
+
+    @Transactional
+    public AlumnoAdminItem cambiarEstadoAlumno(String legajo, EstadoAlumnoReq req, int anio) {
+        Usuario alumno = repo.findById(legajo).orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
+        if (alumno.getTipo() != TipoUsr.ALUMNO) throw new IllegalArgumentException("El legajo no pertenece a un alumno");
+        if (req.estado() == null) throw new IllegalArgumentException("Seleccioná un estado");
+        alumno.setEstadoAlumno(req.estado());
+        alumno.setActivo(req.estado() == EstadoAlumno.ACTIVO);
+        if (req.estado() != EstadoAlumno.ACTIVO) {
+            inscRepo.findByAlumnoLegajoAndActivaTrue(legajo).forEach(i -> i.setActiva(false));
+        }
+        return mapAlumnosAdmin(List.of(repo.save(alumno)), anio).get(0);
+    }
+
+    private List<AlumnoAdminItem> mapAlumnosAdmin(List<Usuario> usuarios, int anio) {
+        if (usuarios.isEmpty()) return List.of();
+        var legajos = usuarios.stream().map(Usuario::getLegajo).toList();
+        var inscripciones = inscRepo.findByAlumnoLegajoInAndAnioAndActivaTrue(legajos, anio);
+        var porAlumno = inscripciones.stream().collect(java.util.stream.Collectors.toMap(
+            i -> i.getAlumno().getLegajo(), i -> i, (a, b) -> a));
+        return usuarios.stream().map(u -> {
+            var insc = porAlumno.get(u.getLegajo());
+            var curso = insc != null ? insc.getCurso() : null;
+            return new AlumnoAdminItem(u.getLegajo(), u.nomCompleto(), u.getMail(), u.isActivo(), u.getEstadoAlumno(),
+                curso != null ? curso.getId() : null,
+                curso != null ? curso.etiqueta() : null,
+                curso != null ? curso.getTurno().name() : null,
+                curso != null ? curso.getEsp().name() : null);
+        }).toList();
+    }
+
+    private List<String> legajosMatriculacion(int anio, long cursoId, boolean disponibles) {
+        var all = new java.util.ArrayList<String>();
+        int page = 0;
+        PaginaAlumnos result;
+        do {
+            result = buscarMatriculacion("", anio, cursoId, disponibles, page++, 100);
+            all.addAll(result.items().stream().map(AlumnoAdminItem::legajo).toList());
+        } while (page < result.pages());
+        return all;
+    }
+
+    private String normalizarBusqueda(String q) { return q == null ? "" : q.trim().toLowerCase(); }
+    private String csv(String value) { return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\""; }
+    private <T extends Enum<T>> T parseFiltro(String value, Class<T> tipo) {
+        if (value == null || value.isBlank()) return null;
+        try { return Enum.valueOf(tipo, value); }
+        catch (IllegalArgumentException e) { throw new IllegalArgumentException("Filtro inválido: " + value); }
     }
 
 @Transactional
@@ -99,6 +227,7 @@ public UsrRes crear(UsrReq req) {
 
     u.setTipo(req.tipo());
     u.setActivo(true);
+    if (req.tipo() == TipoUsr.ALUMNO) u.setEstadoAlumno(EstadoAlumno.ACTIVO);
 
     repo.save(u);
 
@@ -144,6 +273,10 @@ public UsrRes crear(UsrReq req) {
     public UsrRes toggle(String legajo, boolean activo) {
         Usuario u = repo.findById(legajo).orElseThrow(() -> new NoSuchElementException("No encontrado"));
         u.setActivo(activo);
+        if (u.getTipo() == TipoUsr.ALUMNO && (u.getEstadoAlumno() == EstadoAlumno.ACTIVO || u.getEstadoAlumno() == EstadoAlumno.SUSPENDIDO)) {
+            u.setEstadoAlumno(activo ? EstadoAlumno.ACTIVO : EstadoAlumno.SUSPENDIDO);
+            if (!activo) inscRepo.findByAlumnoLegajoAndActivaTrue(legajo).forEach(i -> i.setActiva(false));
+        }
         return toRes(repo.save(u));
     }
 
@@ -191,13 +324,16 @@ public UsrRes crear(UsrReq req) {
 @Transactional
 public Inscripcion inscribir(InscReq req) {
 
-    Usuario al = repo.findById(req.legajo())
+    Usuario al = repo.findByLegajoForUpdate(req.legajo())
         .orElseThrow(() -> new NoSuchElementException(
             "Alumno no encontrado: " + req.legajo()
         ));
 
     if (al.getTipo() != TipoUsr.ALUMNO) {
         throw new IllegalArgumentException("Debe ser alumno");
+    }
+    if (!al.isActivo() || al.getEstadoAlumno() != EstadoAlumno.ACTIVO) {
+        throw new IllegalArgumentException("Solo se pueden matricular alumnos con estado Activo");
     }
 
     Curso nuevoCurso = cursoRepo.findById(req.cursoId())
@@ -210,9 +346,11 @@ public Inscripcion inscribir(InscReq req) {
         req.anio()
     );
 
-    for (var actual : activas) {
-        actual.setActiva(false);
-        inscRepo.save(actual);
+    if (activas.stream().anyMatch(actual -> !actual.getCurso().getId().equals(nuevoCurso.getId()))) {
+    String origenes = activas.stream().filter(actual -> !actual.getCurso().getId().equals(nuevoCurso.getId()))
+        .map(actual -> actual.getCurso().etiqueta()).distinct().collect(java.util.stream.Collectors.joining(", "));
+    throw new IllegalStateException("El alumno ya está matriculado en " + origenes
+        + ". Retirá esa inscripción antes de asignarlo a otro curso.");
     }
 
     var existente = inscRepo.findByAlumnoLegajoAndCursoIdAndAnio(

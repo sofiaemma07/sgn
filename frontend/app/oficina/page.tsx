@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Toast from "@/components/Toast";
 import SolicitudesTable from "@/components/SolicitudesTable";
 import Shell from "@/components/Shell";
@@ -9,6 +10,8 @@ import { api } from "@/lib/api";
 import type { Solicitud } from "@/lib/types";
 
 export default function OficinaPage() {
+  const searchParams = useSearchParams();
+  const solicitudId = Number(searchParams.get("solicitudId")) || null;
   const [items, setItems] = useState<Solicitud[]>([]);
   const [todas, setTodas] = useState(false);
   const [err, setErr] = useState("");
@@ -25,8 +28,8 @@ export default function OficinaPage() {
   }
 
   useEffect(() => {
-    loadItems(false);
-  }, []);
+    loadItems(solicitudId ? true : false);
+  }, [solicitudId]);
 
   async function resolver(id: number, ok: boolean) {
     setErr("");
@@ -67,7 +70,7 @@ export default function OficinaPage() {
         </div>
         {err && <div className="alert alert-error">{err}</div>}
         {msg && <Toast message={msg} onClose={() => setMsg("")}/>}
-        <SolicitudesTable items={items} loading={load} error={err} todas={todas} onResolver={resolver}/>
+        <SolicitudesTable items={items} loading={load} error={err} todas={todas} onResolver={resolver} highlightId={solicitudId}/>
       </Shell>
     </Guard>
   );

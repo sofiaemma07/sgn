@@ -6,6 +6,8 @@ export type TipoUsuario =
   | "PRECEPTOR"
   | "DIRECTIVO";
 
+export type EstadoAlumno = "ACTIVO" | "CON_PASE" | "EGRESADO" | "SUSPENDIDO";
+
 export interface Session {
   token: string;
   legajo: string;
@@ -51,7 +53,16 @@ export interface Nota {
   materia?: string;
   curso?: string;
   anio?: number;
+  borrador?: boolean;
 }
+
+export type FasePlanilla = "BIM_1" | "BIM_2" | "FINAL_1" | "BIM_3" | "BIM_4" | "FINAL_2" | "CUAT_1" | "CUAT_2" | "CIERRE_1" | "CIERRE_2" | "CIERRE_3" | "CALIF_DEF";
+export interface FaseInfo { fase: FasePlanilla; etiqueta: string; desde: string | null; hasta: string | null; habilitada: boolean }
+export interface PlanillaFila { legajo: string; alumno: string; val: string; notaId: number | null; borrador: boolean }
+export interface Planilla { bloqueId: number; materia: string; curso: string; anio: number; fase: FasePlanilla; estado: string; desde: string | null; hasta: string | null; alumnos: PlanillaFila[] }
+export interface PlanillaFase { fase: FasePlanilla; etiqueta: string; referencia: string; desde: string | null; hasta: string | null; estado: string }
+export interface PlanillaAlumno { legajo: string; alumno: string; notas: Record<string, string> }
+export interface PlanillaCompleta { bloqueId: number; materia: string; curso: string; anio: number; fases: PlanillaFase[]; alumnos: PlanillaAlumno[] }
 
 export interface Solicitud {
   id: number;
@@ -76,6 +87,7 @@ export interface Reporte {
   motivo: string;
   est: string;
   fecRep: string;
+  puedeSolicitarCambio?: boolean;
 }
 
 export interface Usuario {
@@ -89,6 +101,26 @@ export interface Usuario {
   mailTutor: string | null;
   tipo: TipoUsuario;
   activo: boolean;
+}
+
+export interface AlumnoAdmin {
+  legajo: string;
+  nombre: string;
+  mail: string;
+  activo: boolean;
+  estado: EstadoAlumno;
+  cursoId: number | null;
+  curso: string | null;
+  turno: string | null;
+  especialidad: string | null;
+}
+
+export interface PaginaAlumnos {
+  items: AlumnoAdmin[];
+  page: number;
+  size: number;
+  total: number;
+  pages: number;
 }
 
 export interface Curso {
@@ -114,6 +146,11 @@ export interface Boletin {
   fecGen: string;
 }
 
+export interface BoletinPublicacion {
+  publicado: boolean;
+  publicadoEn: string | null;
+}
+
 export interface Rendimiento {
   pctGlobal: number;
   promGeneral: number;
@@ -127,12 +164,29 @@ export interface Auditoria {
   autorizo: string;
   alumno: string;
   materia: string;
+  periodo: string | null;
   valAnt: string;
   valNuevo: string;
   motivo: string;
   accion: string;
   est: string;
   fec: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  recipient_id: string;
+  recipient_role: "alumno" | "docente" | "oficina_alumnos";
+  title: string;
+  message: string;
+  read: boolean;
+  created_at: string;
+  target_url: string;
+  metadata?: {
+    materia?: string;
+    periodo?: string;
+    solicitud_id?: number;
+  };
 }
 
 export interface MailLog {

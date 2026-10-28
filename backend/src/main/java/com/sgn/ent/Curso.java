@@ -27,7 +27,12 @@ public class Curso {
     private Esp esp;
 
     public String etiqueta() {
-        return anio + "°" + div + " " + turno.name().toLowerCase();
+        String turnoVisible = switch (turno) {
+            case MANANA -> "Mañana";
+            case TARDE -> "Tarde";
+            case NOCHE -> "Noche";
+        };
+        return anio + "° " + div + "ª · Turno " + turnoVisible;
     }
 
     public Long getId() { return id; }

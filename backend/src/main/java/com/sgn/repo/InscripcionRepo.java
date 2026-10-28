@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface InscripcionRepo extends JpaRepository<Inscripcion, Long> {
 
     List<Inscripcion> findByAlumnoLegajoAndAnio(String legajo, int anio);
+    List<Inscripcion> findByAlumnoLegajoAndActivaTrue(String legajo);
 
     List<Inscripcion> findByCursoIdAndAnio(Long cursoId, int anio);
 
@@ -22,6 +23,8 @@ public interface InscripcionRepo extends JpaRepository<Inscripcion, Long> {
         String legajo,
         int anio
     );
+
+    List<Inscripcion> findByAlumnoLegajoInAndAnioAndActivaTrue(List<String> legajos, int anio);
 
     Optional<Inscripcion> findByAlumnoLegajoAndCursoIdAndAnioAndActivaTrue(
         String legajo,

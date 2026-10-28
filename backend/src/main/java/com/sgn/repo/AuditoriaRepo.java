@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface AuditoriaRepo extends JpaRepository<Auditoria, Long> {
     List<Auditoria> findAllByOrderByFecDesc();
+    List<Auditoria> findByAlumnoLegajoAndAccionOrderByFecDesc(String legajo, String accion);
 }

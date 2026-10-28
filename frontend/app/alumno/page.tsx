@@ -10,22 +10,24 @@ import { cursoLabel } from "@/lib/presentation";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
-import type { Bloque, Perfil, Rendimiento } from "@/lib/types";
+import type { Bloque, BoletinPublicacion, Perfil, Rendimiento } from "@/lib/types";
 
 export default function AlumnoPage() {
   const [materias, setMaterias] = useState<Bloque[]>([]);
   const [rend, setRend] = useState<Rendimiento | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [boletin, setBoletin] = useState<BoletinPublicacion | null>(null);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [load, setLoad] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.materiasAlumno(), api.rendimiento(), api.me()])
-      .then(([m, r, p]) => {
+    Promise.all([api.materiasAlumno(), api.rendimiento(), api.me(), api.publicacionBoletinAlumno()])
+      .then(([m, r, p, b]) => {
         setMaterias(m);
         setRend(r);
         setPerfil(p);
+        setBoletin(b);
       })
       .catch((e) => setErr(e.message))
       .finally(() => setLoad(false));
@@ -54,9 +56,11 @@ export default function AlumnoPage() {
             <h2>{perfil.nom}</h2>
             <p className="card-meta">Legajo {perfil.legajo} · Curso {perfil.curso || "—"} · Año {perfil.anioLectivo}</p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={pdf}><Icon name="download" size={17}/> Descargar boletín PDF</button>
+          {boletin?.publicado
+            ? <button type="button" className="btn btn-primary" onClick={pdf}><Icon name="download" size={17}/> Leer / descargar boletín</button>
+            : <p className="card-meta">El boletín estará disponible cuando Oficina de Alumnos lo publique.</p>}
         </div>}
-        {rend && <RendimientoCard rend={rend}/>}
+        {rend && <RendimientoCard rend={rend} bloques={materias}/>}
 
         <h2>Materias</h2>
         {!load && !err && materias.length === 0 && <EmptyState title="Sin materias asignadas" description="Tus materias aparecerán cuando se registre tu inscripción al curso."/>}

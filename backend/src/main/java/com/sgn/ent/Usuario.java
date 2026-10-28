@@ -1,6 +1,7 @@
 package com.sgn.ent;
 
 import com.sgn.enm.TipoUsr;
+import com.sgn.enm.EstadoAlumno;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -44,6 +45,10 @@ public class Usuario {
     @Column(nullable = false)
     private boolean activo = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private EstadoAlumno estadoAlumno;
+
     public String nomCompleto() {
         String n = nom + (nom2 != null && !nom2.isBlank() ? " " + nom2 : "");
         String a = ape + (ape2 != null && !ape2.isBlank() ? " " + ape2 : "");
@@ -85,4 +90,9 @@ public void setPrimerIngreso(boolean primerIngreso) {
     public void setUltAcc(LocalDateTime ultAcc) { this.ultAcc = ultAcc; }
     public boolean isActivo() { return activo; }
     public void setActivo(boolean activo) { this.activo = activo; }
+    public EstadoAlumno getEstadoAlumno() {
+        if (estadoAlumno != null) return estadoAlumno;
+        return activo ? EstadoAlumno.ACTIVO : EstadoAlumno.SUSPENDIDO;
+    }
+    public void setEstadoAlumno(EstadoAlumno estadoAlumno) { this.estadoAlumno = estadoAlumno; }
 }

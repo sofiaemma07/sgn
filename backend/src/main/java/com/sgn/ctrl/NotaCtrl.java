@@ -4,6 +4,7 @@ import com.sgn.dto.Dtos.*;
 import com.sgn.ent.Usuario;
 import com.sgn.srv.BoletinSrv;
 import com.sgn.srv.NotaSrv;
+import com.sgn.srv.BoletinPublicacionSrv;
 import com.sgn.srv.UsrDetailsSrv;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.sgn.enm.FasePlanilla;
 
 @RestController
 @RequestMapping("/api/notas")
@@ -21,11 +23,14 @@ public class NotaCtrl {
     private final NotaSrv srv;
     private final BoletinSrv bolSrv;
     private final UsrDetailsSrv det;
+    private final BoletinPublicacionSrv publicacionSrv;
 
-    public NotaCtrl(NotaSrv srv, BoletinSrv bolSrv, UsrDetailsSrv det) {
+    public NotaCtrl(NotaSrv srv, BoletinSrv bolSrv, UsrDetailsSrv det,
+                    BoletinPublicacionSrv publicacionSrv) {
         this.srv = srv;
         this.bolSrv = bolSrv;
         this.det = det;
+        this.publicacionSrv = publicacionSrv;
     }
 
     private Usuario me() {
@@ -51,6 +56,89 @@ public List<BloqueRes> misBloques() {
     @PreAuthorize("hasAnyRole('PROFESOR','PRECEPTOR','DIRECTIVO','OFICINA','ADMIN')")
     public List<AlumnoRes> alumnos(@PathVariable long id) {
         return srv.alumnosBloque(id, me());
+    }
+
+    @GetMapping("/bloques/{id}/planilla")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public PlanillaRes planilla(@PathVariable long id, @RequestParam FasePlanilla fase) {
+        return srv.planilla(id, fase, me());
+    }
+
+    @GetMapping("/bloques/{id}/planilla/completa")
+    @PreAuthorize("hasAnyRole('PROFESOR','OFICINA','ADMIN')")
+    public PlanillaCompleta planillaCompleta(@PathVariable long id) {
+        return srv.planillaCompleta(id, me());
+    }
+
+    @GetMapping("/bloques/{id}/boletin/publicacion")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public BoletinPublicacionRes estadoPublicacion(@PathVariable long id) {
+        return publicacionSrv.estadoBloque(id);
+    }
+
+    @PutMapping("/bloques/{id}/boletin/publicacion")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public BoletinPublicacionRes publicarBoletin(@PathVariable long id, @RequestParam boolean publicado) {
+        return publicacionSrv.publicar(id, publicado, me());
+    }
+
+    @GetMapping("/bloques/{id}/planilla.pdf")
+    @PreAuthorize("hasAnyRole('PROFESOR','OFICINA','ADMIN')")
+    public ResponseEntity<byte[]> pdfPlanilla(@PathVariable long id) {
+        byte[] pdf = bolSrv.pdfPlanilla(srv.planillaCompleta(id, me()));
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=boletin-planilla-" + id + ".pdf")
+            .contentType(MediaType.APPLICATION_PDF)
+            .body(pdf);
+    }
+
+    @GetMapping("/bloques/{id}/boletines.pdf")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public ResponseEntity<byte[]> pdfBoletinesCurso(@PathVariable long id) {
+        byte[] pdf = bolSrv.pdfBoletinesCurso(srv.planillasCurso(id, me()), null);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=boletines-curso-" + id + ".pdf")
+            .contentType(MediaType.APPLICATION_PDF)
+            .body(pdf);
+    }
+
+    @GetMapping("/bloques/{id}/alumnos/{legajo}/boletin.pdf")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public ResponseEntity<byte[]> pdfBoletinAlumnoCurso(@PathVariable long id, @PathVariable String legajo) {
+        byte[] pdf = bolSrv.pdfBoletinesCurso(srv.planillasCurso(id, me()), legajo);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=boletin-" + legajo + ".pdf")
+            .contentType(MediaType.APPLICATION_PDF)
+            .body(pdf);
+    }
+
+    @PutMapping("/planilla/borrador")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public PlanillaRes guardarPlanilla(@RequestBody PlanillaReq req) {
+        return srv.guardarPlanilla(req, me(), false);
+    }
+
+       @PutMapping("/planilla/borradores")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public MsgRes guardarBorradores(@RequestBody List<PlanillaReq> reqs) {
+        srv.guardarBorradores(reqs, me());
+        return new MsgRes("Borradores guardados");
+    }
+
+    @PostMapping("/planilla/cerrar")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public PlanillaRes cerrarPlanilla(@RequestBody PlanillaReq req) {
+        return srv.guardarPlanilla(req, me(), true);
+    }
+
+    @GetMapping("/fases/{anio}")
+    @PreAuthorize("hasAnyRole('PROFESOR','OFICINA','ADMIN','ALUMNO')")
+    public List<FaseInfo> fases(@PathVariable int anio) { return srv.fases(anio); }
+
+    @PutMapping("/fases/{anio}")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public FaseInfo configurarFase(@PathVariable int anio, @RequestBody FaseConfigReq req) {
+        return srv.configurarFase(anio, req);
     }
 
     @GetMapping("/bloques/{bloqueId}/alumnos/{legajo}")
@@ -114,6 +202,13 @@ public List<BloqueRes> misBloques() {
         return srv.repDocSolicita(id, req, me());
     }
 
+    @PostMapping("/reportes/{id}/cerrar")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public MsgRes cerrarReporte(@PathVariable long id) {
+        srv.cerrarReporte(id, me());
+        return new MsgRes("Reporte cerrado");
+    }
+
     @GetMapping("/alumno/materias")
     @PreAuthorize("hasRole('ALUMNO')")
     public List<BloqueRes> materiasAlumno() {
@@ -132,10 +227,27 @@ public List<BloqueRes> misBloques() {
         return srv.historialAlumno(me().getLegajo());
     }
 
+    @GetMapping("/alumno/reportables")
+    @PreAuthorize("hasRole('ALUMNO')")
+    public List<Long> notasReportables() {
+        return srv.notasReportablesAlumno(me().getLegajo());
+    }
+
+    @GetMapping("/alumno/cambios")
+    @PreAuthorize("hasRole('ALUMNO')")
+    public List<AudRes> cambiosAlumno() { return srv.cambiosAlumno(me().getLegajo()); }
+
     @GetMapping("/alumno/boletines")
     @PreAuthorize("hasRole('ALUMNO')")
     public List<BolRes> boletines() {
+        if (!publicacionSrv.estaPublicado(me().getLegajo(), srv.anioActivo())) return List.of();
         return srv.boletines(me().getLegajo());
+    }
+
+    @GetMapping("/alumno/boletin/publicacion")
+    @PreAuthorize("hasRole('ALUMNO')")
+    public BoletinPublicacionRes estadoPublicacionAlumno() {
+        return publicacionSrv.estadoAlumno(me().getLegajo(), srv.anioActivo());
     }
 
     @GetMapping("/alumno/boletin.pdf")

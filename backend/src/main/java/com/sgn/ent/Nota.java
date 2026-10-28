@@ -1,6 +1,7 @@
 package com.sgn.ent;
 
 import com.sgn.enm.EstNota;
+import com.sgn.enm.FasePlanilla;
 import com.sgn.enm.TipoNota;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -29,11 +30,21 @@ public class Nota {
     @Column(nullable = false)
     private int numPer;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private FasePlanilla fase;
+
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private boolean borrador = false;
+
     @Column(length = 200)
     private String titulo;
 
     @Column(precision = 4, scale = 2)
     private BigDecimal val;
+
+    @Column(name = "valor_especial", length = 8)
+    private String valorEspecial;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)
@@ -58,10 +69,16 @@ public class Nota {
     public void setTipo(TipoNota tipo) { this.tipo = tipo; }
     public int getNumPer() { return numPer; }
     public void setNumPer(int numPer) { this.numPer = numPer; }
+    public FasePlanilla getFase() { return fase; }
+    public void setFase(FasePlanilla fase) { this.fase = fase; }
+    public boolean isBorrador() { return borrador; }
+    public void setBorrador(boolean borrador) { this.borrador = borrador; }
     public String getTitulo() { return titulo; }
     public void setTitulo(String titulo) { this.titulo = titulo; }
     public BigDecimal getVal() { return val; }
     public void setVal(BigDecimal val) { this.val = val; }
+    public String getValorEspecial() { return valorEspecial; }
+    public void setValorEspecial(String valorEspecial) { this.valorEspecial = valorEspecial; }
     public EstNota getEst() { return est; }
     public void setEst(EstNota est) { this.est = est; }
     public Usuario getCargadoPor() { return cargadoPor; }

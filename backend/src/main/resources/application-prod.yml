@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+sgn:
+  auth:
+    cookie-secure: true
+    cookie-same-site: ${SGN_SESSION_COOKIE_SAME_SITE:Lax}
+  jwt:
+    secret: ${SGN_JWT_SECRET}
+    exp-ms: ${SGN_JWT_EXP_MS:18000000}
+  mail:
+    enabled: true
+    from: ${SGN_MAIL_FROM:${SPRING_MAIL_USERNAME}}
+  seed:
+    admin-password: ${SGN_SEED_ADMIN_PASSWORD}
+    office-password: ${SGN_SEED_OFFICE_PASSWORD}
+    admin-legajo: ${SGN_SEED_ADMIN_LEGAJO}
+    admin-cuil: ${SGN_SEED_ADMIN_CUIL}
+    admin-email: ${SGN_SEED_ADMIN_EMAIL}
+    office-legajo: ${SGN_SEED_OFFICE_LEGAJO}
+    office-cuil: ${SGN_SEED_OFFICE_CUIL}
+    office-email: ${SGN_SEED_OFFICE_EMAIL}
+  anio-activo: ${SGN_ANIO_ACTIVO}
+  cors:
+    origins: ${SGN_CORS_ORIGINS}
+
+server:
+  forward-headers-strategy: framework

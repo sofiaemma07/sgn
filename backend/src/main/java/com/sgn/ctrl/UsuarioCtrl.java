@@ -200,6 +200,20 @@ public MsgRes resetPassword(@PathVariable String legajo) {
         return new MsgRes("Bloque asignado");
     }
 
+    @PutMapping("/bloque/{id}")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public MsgRes editarBloque(@PathVariable long id, @RequestBody BloqueReq req) {
+        srv.editarBloque(id, req);
+        return new MsgRes("Docentes y modalidad actualizados");
+    }
+
+    @PutMapping("/bloque/{id}/finalizar-suplencia")
+    @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
+    public MsgRes finalizarSuplencia(@PathVariable long id) {
+        srv.finalizarSuplencia(id);
+        return new MsgRes("Suplencia finalizada; se reactivó el docente titular");
+    }
+
     @GetMapping("/notificaciones")
     @PreAuthorize("hasRole('ADMIN')")
     public List<MailRes> notificaciones() {

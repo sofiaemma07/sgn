@@ -25,15 +25,17 @@ public class BoletinPublicacionSrv {
     private final InscripcionRepo inscRepo;
     private final FaseCargaRepo faseRepo;
     private final PlanillaCierreRepo cierreRepo;
+    private final MailSrv mailSrv;
 
     public BoletinPublicacionSrv(BoletinPublicacionRepo repo, BloqueRepo bloqueRepo,
                                  InscripcionRepo inscRepo, FaseCargaRepo faseRepo,
-                                 PlanillaCierreRepo cierreRepo) {
+                                 PlanillaCierreRepo cierreRepo, MailSrv mailSrv) {
         this.repo = repo;
         this.bloqueRepo = bloqueRepo;
         this.inscRepo = inscRepo;
         this.faseRepo = faseRepo;
         this.cierreRepo = cierreRepo;
+        this.mailSrv = mailSrv;
     }
 
     public BoletinPublicacionRes estadoBloque(long bloqueId) {
@@ -63,12 +65,24 @@ public class BoletinPublicacionSrv {
         if (publicado) validarFasesVencidasCerradas(bloque.getCurso().getId(), bloque.getAnio());
         var entity = repo.findByCursoIdAndAnio(bloque.getCurso().getId(), bloque.getAnio())
             .orElseGet(BoletinPublicacion::new);
+        boolean avisarPublicacion = publicado && !entity.isPublicado();
         entity.setCurso(bloque.getCurso());
         entity.setAnio(bloque.getAnio());
         entity.setPublicado(publicado);
         entity.setPublicadoEn(publicado ? LocalDateTime.now() : null);
         entity.setPublicadoPor(publicado ? actor : null);
         entity = repo.save(entity);
+        if (avisarPublicacion) {
+            String curso = bloque.getCurso().etiqueta();
+            for (var inscripcion : inscRepo.findByCursoIdAndAnio(bloque.getCurso().getId(), bloque.getAnio())) {
+                if (!inscripcion.isActiva()) continue;
+                var alumno = inscripcion.getAlumno();
+                String mensaje = "El boletín del curso " + curso + " ya está disponible en el Sistema de Gestión de Notas.";
+                mailSrv.enviar(alumno.getMail(), "SGN - Boletín publicado", mensaje);
+                if (alumno.getMailTutor() != null && !alumno.getMailTutor().isBlank())
+                    mailSrv.enviar(alumno.getMailTutor(), "SGN - Boletín publicado", mensaje);
+            }
+        }
         return new BoletinPublicacionRes(entity.isPublicado(), entity.getPublicadoEn() != null
             ? entity.getPublicadoEn().toString() : null);
     }

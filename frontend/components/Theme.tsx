@@ -1,33 +1,28 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
-import { getSession } from "@/lib/auth";
 
 type Appearance = "light" | "dark";
 const ThemeContext = createContext({ theme: "light" as Appearance, toggle: () => {} });
 
-function themeKey() {
-  return `sgn_theme_${getSession()?.legajo || "guest"}`;
-}
+const THEME_KEY = "sgn_theme";
 
 export default function Theme({ children }: { children: ReactNode }) {
-  const path = usePathname();
   const [theme, setTheme] = useState<Appearance>("light");
   useEffect(() => {
     let savedTheme: Appearance = "light";
     try {
-      if (localStorage.getItem(themeKey()) === "dark") savedTheme = "dark";
+      if (localStorage.getItem(THEME_KEY) === "dark") savedTheme = "dark";
     } catch {}
     setTheme(savedTheme);
     document.documentElement.dataset.theme = savedTheme;
-  }, [path]);
+  }, []);
 
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem(themeKey(), next); } catch {}
+    try { localStorage.setItem(THEME_KEY, next); } catch {}
   }
 
   return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;

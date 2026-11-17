@@ -2,6 +2,8 @@ package com.sgn.ctrl;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -12,6 +14,7 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class ErrCtrl {
+    private static final Logger log = LoggerFactory.getLogger(ErrCtrl.class);
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> badArg(IllegalArgumentException e) {
@@ -51,6 +54,7 @@ public class ErrCtrl {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> other(Exception e) {
+        log.error("Error interno no controlado", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(Map.of("error", "Error interno del servidor"));
     }

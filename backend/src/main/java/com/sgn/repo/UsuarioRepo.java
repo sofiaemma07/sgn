@@ -45,7 +45,8 @@ public interface UsuarioRepo extends JpaRepository<Usuario, String> {
             or (:cursoId = -1 and not exists (select i0.id from Inscripcion i0 where i0.alumno = u and i0.anio = :anio and i0.activa = true))
             or exists (select i1.id from Inscripcion i1 where i1.alumno = u and i1.anio = :anio and i1.activa = true and i1.curso.id = :cursoId))
           and (:turno is null or exists (select i2.id from Inscripcion i2 where i2.alumno = u and i2.anio = :anio and i2.activa = true and i2.curso.turno = :turno))
-          and (:esp is null or exists (select i3.id from Inscripcion i3 where i3.alumno = u and i3.anio = :anio and i3.activa = true and i3.curso.esp = :esp))
+          and (:esp is null or exists (select i3.id from Inscripcion i3 where i3.alumno = u and i3.anio = :anio and i3.activa = true
+            and ((:esp = com.sgn.enm.Esp.CICLO_BASICO and i3.curso.anio <= 2) or i3.curso.esp = :esp)))
         """,
         countQuery = """
         select count(u) from Usuario u
@@ -64,7 +65,8 @@ public interface UsuarioRepo extends JpaRepository<Usuario, String> {
             or (:cursoId = -1 and not exists (select i0.id from Inscripcion i0 where i0.alumno = u and i0.anio = :anio and i0.activa = true))
             or exists (select i1.id from Inscripcion i1 where i1.alumno = u and i1.anio = :anio and i1.activa = true and i1.curso.id = :cursoId))
           and (:turno is null or exists (select i2.id from Inscripcion i2 where i2.alumno = u and i2.anio = :anio and i2.activa = true and i2.curso.turno = :turno))
-          and (:esp is null or exists (select i3.id from Inscripcion i3 where i3.alumno = u and i3.anio = :anio and i3.activa = true and i3.curso.esp = :esp))
+          and (:esp is null or exists (select i3.id from Inscripcion i3 where i3.alumno = u and i3.anio = :anio and i3.activa = true
+            and ((:esp = com.sgn.enm.Esp.CICLO_BASICO and i3.curso.anio <= 2) or i3.curso.esp = :esp)))
         """)
     Page<Usuario> buscarPadron(@Param("q") String q, @Param("anio") int anio,
         @Param("cursoId") Long cursoId, @Param("turno") Turno turno,

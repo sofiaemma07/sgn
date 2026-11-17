@@ -6,7 +6,7 @@ import { label, cursoLabel } from "@/lib/presentation";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
-import type { Curso, MailLog, Materia, Usuario } from "@/lib/types";
+import type { Bloque, Curso, MailLog, Materia, Usuario } from "@/lib/types";
 
 const TIPOS = ["ADMIN", "OFICINA", "PROFESOR", "ALUMNO", "PRECEPTOR", "DIRECTIVO"] as const;
 
@@ -16,8 +16,10 @@ export default function AdminPage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [materias, setMaterias] = useState<Materia[]>([]);
   const [mails, setMails] = useState<MailLog[]>([]);
+  const [bloques, setBloques] = useState<Bloque[]>([]);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [editBloqueId, setEditBloqueId] = useState<number | null>(null);
   const [edit, setEdit] = useState<Usuario | null>(null);
   const [form, setForm] = useState({
     legajo: "",
@@ -30,14 +32,15 @@ export default function AdminPage() {
   });
   const [curso, setCurso] = useState({ anio: 4, div: 1, turno: "MANANA", esp: "COMPUTACION" });
   const [matNom, setMatNom] = useState("");
-  const [bloque, setBloque] = useState({ materiaId: 0, cursoId: 0, profLegajo: "", anio: 2026 });
+  const [bloque, setBloque] = useState({ materiaId: 0, cursoId: 0, profLegajo: "", segundoProfLegajo: "", modalidad: "INDIVIDUAL" as "INDIVIDUAL" | "SUPLENCIA" | "CONJUNTA", anio: 2026 });
 
   function load() {
-    Promise.all([api.usuarios(), api.cursos(), api.materias()])
-      .then(([u, c, m]) => {
+    Promise.all([api.usuarios(), api.cursos(), api.materias(), api.bloquesVer()])
+      .then(([u, c, m, b]) => {
         setUsers(u);
         setCursos(c);
         setMaterias(m);
+        setBloques(b);
         if (c.length && !bloque.cursoId) setBloque((b) => ({ ...b, cursoId: c[0].id }));
         if (m.length && !bloque.materiaId) setBloque((b) => ({ ...b, materiaId: m[0].id }));
       })
@@ -113,7 +116,7 @@ export default function AdminPage() {
   async function crearCurso(e: FormEvent) {
     e.preventDefault();
     try {
-      await api.crearCurso(curso);
+      await api.crearCurso({ ...curso, esp: curso.anio <= 2 ? "CICLO_BASICO" : curso.esp });
       setMsg("Curso creado");
       load();
     } catch (ex) {
@@ -135,11 +138,48 @@ export default function AdminPage() {
 
   async function asignar(e: FormEvent) {
     e.preventDefault();
+    setErr(""); setMsg("");
     try {
-      await api.asignarBloque(bloque);
-      setMsg("Docente asignado al bloque");
+      if (editBloqueId) {
+        const current = bloques.find((item) => item.id === editBloqueId);
+        if (current && current.modalidad === undefined)
+          throw new Error("El backend está desactualizado. Reiniciá el servidor Java para habilitar la edición de modalidades docentes.");
+        await api.editarBloque(editBloqueId, bloque);
+        const actualizados = await api.bloquesVer();
+        setBloques(actualizados);
+        const guardado = actualizados.find((item) => item.id === editBloqueId);
+        if (bloque.modalidad !== "INDIVIDUAL" && (guardado?.modalidad !== bloque.modalidad || guardado?.segundoDocenteLegajo !== bloque.segundoProfLegajo))
+          throw new Error("El servidor no guardó la modalidad elegida. Reiniciá el backend y volvé a intentarlo.");
+        setMsg("Docentes y modalidad actualizados");
+        setEditBloqueId(null);
+      } else {
+        await api.asignarBloque(bloque);
+        const actualizados = await api.bloquesVer();
+        setBloques(actualizados);
+        const guardado = actualizados.find((item) => item.materiaId === bloque.materiaId && item.cursoId === bloque.cursoId && item.anio === bloque.anio);
+        if (bloque.modalidad !== "INDIVIDUAL" && (guardado?.modalidad !== bloque.modalidad || guardado?.segundoDocenteLegajo !== bloque.segundoProfLegajo))
+          throw new Error("El servidor respondió a la asignación, pero no guardó la modalidad elegida. Reiniciá el backend y volvé a intentarlo.");
+        setMsg(bloque.modalidad === "INDIVIDUAL" ? "Docente asignado al bloque" : "Docentes asignados al bloque");
+      }
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Error");
+    }
+  }
+
+  function editarAsignacion(item: Bloque) {
+    setErr(""); setMsg(""); setTab("bloques"); setEditBloqueId(item.id);
+    setBloque({ materiaId: item.materiaId, cursoId: item.cursoId, profLegajo: item.docenteLegajo || "",
+      segundoProfLegajo: item.segundoDocenteLegajo || "", modalidad: item.modalidad || "INDIVIDUAL", anio: item.anio });
+  }
+
+  async function finalizarSuplencia(item: Bloque) {
+    setErr("");
+    try {
+      await api.finalizarSuplencia(item.id);
+      setMsg(`Suplencia finalizada. ${item.docente || "El docente titular"} vuelve a quedar a cargo.`);
+      load();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "No se pudo finalizar la suplencia");
     }
   }
 
@@ -198,7 +238,7 @@ export default function AdminPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="field-6">Mail tutor (alumnos)</label>
-                  <input id="field-6" type="email" value={form.mailTutor} onChange={(e) => setForm({ ...form, mailTutor: e.target.value })} />
+                  <input id="field-6" type="email" value={form.mailTutor} onChange={(e) => setForm({ ...form, mailTutor: e.target.value })} required={form.tipo === "ALUMNO"} />
                 </div>
                 
                 <div className="field">
@@ -230,6 +270,10 @@ export default function AdminPage() {
                   <div className="field">
                     <label htmlFor="field-10">Mail</label>
                     <input id="field-10" value={edit.mail} onChange={(e) => setEdit({ ...edit, mail: e.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="field-12">Mail tutor (alumnos)</label>
+                    <input id="field-12" type="email" required={edit.tipo === "ALUMNO"} value={edit.mailTutor || ""} onChange={(e) => setEdit({ ...edit, mailTutor: e.target.value })} />
                   </div>
                   <div className="field">
                     <label htmlFor="field-11">Rol</label>
@@ -320,7 +364,10 @@ export default function AdminPage() {
               <form className="form" onSubmit={crearCurso}>
                 <div className="field">
                   <label htmlFor="field-12">Año</label>
-                  <input id="field-12" type="number" value={curso.anio} onChange={(e) => setCurso({ ...curso, anio: Number(e.target.value) })} />
+                  <input id="field-12" type="number" min="1" max="6" value={curso.anio} onChange={(e) => {
+                    const anio = Number(e.target.value);
+                    setCurso({ ...curso, anio, esp: anio <= 2 ? "CICLO_BASICO" : curso.esp === "CICLO_BASICO" ? "COMPUTACION" : curso.esp });
+                  }} />
                 </div>
                 <div className="field">
                   <label htmlFor="field-13">División</label>
@@ -335,11 +382,13 @@ export default function AdminPage() {
                   </select>
                 </div>
                 <div className="field">
-                  <label htmlFor="field-15">Especialidad</label>
-                  <select id="field-15" value={curso.esp} onChange={(e) => setCurso({ ...curso, esp: e.target.value })}>
-                    <option value="COMPUTACION">{label("COMPUTACION")}</option>
-                    <option value="AUTOMOTORES">{label("AUTOMOTORES")}</option>
-                  </select>
+                  <label htmlFor="field-15">{curso.anio <= 2 ? "Ciclo" : "Especialidad"}</label>
+                  {curso.anio <= 2
+                    ? <input id="field-15" value={label("CICLO_BASICO")} readOnly />
+                    : <select id="field-15" value={curso.esp} onChange={(e) => setCurso({ ...curso, esp: e.target.value })}>
+                      <option value="COMPUTACION">{label("COMPUTACION")}</option>
+                      <option value="AUTOMOTORES">{label("AUTOMOTORES")}</option>
+                    </select>}
                 </div>
                 <button type="submit" className="btn btn-primary">
                   Crear curso
@@ -409,8 +458,9 @@ export default function AdminPage() {
         )}
 
         {tab === "bloques" && (
-          <div className="panel">
-            <h2>Asignar docente a materia/curso</h2>
+          <>
+            <div className="panel">
+            <h2>{editBloqueId ? "Editar docentes y modalidad" : "Asignar docentes a materia/curso"}</h2>
             <form className="form" onSubmit={asignar}>
               <div className="field">
                 <label htmlFor="field-17">Materia</label>
@@ -439,10 +489,10 @@ export default function AdminPage() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="field-19">Docente</label>
-                <select id="field-19"
+                <label htmlFor="field-19">{bloque.modalidad === "SUPLENCIA" ? "Docente titular" : "Docente"}</label>
+                <select id="field-19" required
                   value={bloque.profLegajo}
-                  onChange={(e) => setBloque({ ...bloque, profLegajo: e.target.value })}
+                  onChange={(e) => setBloque({ ...bloque, profLegajo: e.target.value, segundoProfLegajo: bloque.segundoProfLegajo === e.target.value ? "" : bloque.segundoProfLegajo })}
                 >
                   <option value="">Seleccionar</option>
                   {docentes.map((d) => (
@@ -453,6 +503,28 @@ export default function AdminPage() {
                 </select>
               </div>
               <div className="field">
+                <label htmlFor="field-21">Modalidad docente</label>
+                <select id="field-21" value={bloque.modalidad}
+                  onChange={(e) => setBloque({ ...bloque, modalidad: e.target.value as typeof bloque.modalidad, segundoProfLegajo: "" })}>
+                  <option value="INDIVIDUAL">Un profesor</option>
+                  <option value="SUPLENCIA">Suplencia temporal</option>
+                  <option value="CONJUNTA">Dan la materia juntos</option>
+                </select>
+              </div>
+              {bloque.modalidad !== "INDIVIDUAL" && <div className="field">
+                <label htmlFor="field-22">{bloque.modalidad === "SUPLENCIA" ? "Profesor suplente" : "Segundo profesor"}</label>
+                <select id="field-22" required value={bloque.segundoProfLegajo}
+                  onChange={(e) => setBloque({ ...bloque, segundoProfLegajo: e.target.value })}>
+                  <option value="">Seleccionar</option>
+                  {docentes.filter((d) => d.legajo !== bloque.profLegajo).map((d) => (
+                    <option key={d.legajo} value={d.legajo}>{d.nom} {d.ape} ({d.legajo})</option>
+                  ))}
+                </select>
+                {bloque.modalidad === "SUPLENCIA"
+                  ? <small>El titular queda suspendido en este bloque hasta que Oficina finalice la suplencia.</small>
+                  : <small>Ambos editan la misma planilla. Cada fase requiere la confirmación de los dos para entregarse.</small>}
+              </div>}
+              <div className="field">
                 <label htmlFor="field-20">Año lectivo</label>
                 <input id="field-20"
                   type="number"
@@ -461,10 +533,27 @@ export default function AdminPage() {
                 />
               </div>
               <button type="submit" className="btn btn-primary">
-                Asignar
+                {editBloqueId ? "Guardar cambios" : "Asignar modalidad"}
               </button>
+              {editBloqueId && <button type="button" className="btn" onClick={() => setEditBloqueId(null)}>Cancelar</button>}
             </form>
-          </div>
+            </div>
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr><th>Materia</th><th>Curso</th><th>Docente titular</th><th>Segundo docente</th><th>Modalidad</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>{bloques.map((b) => <tr key={b.id}>
+                  <td>{b.materia}</td><td>{cursoLabel(b.curso)}</td><td>{b.docente || "—"}</td><td>{b.segundoDocente || "—"}</td>
+                  <td>{b.modalidad === "CONJUNTA" ? "Conjunta" : b.modalidad === "SUPLENCIA" ? "Suplencia" : "Individual"}</td>
+                  <td>{b.modalidad === "SUPLENCIA" ? b.suplenciaActiva ? "Activa" : "Finalizada" : "Activa"}</td>
+                  <td><div className="btn-row">
+                    <button type="button" className="btn btn-sm" onClick={() => editarAsignacion(b)}>Editar</button>
+                    {b.modalidad === "SUPLENCIA" && b.suplenciaActiva && <button type="button" className="btn btn-sm" onClick={() => void finalizarSuplencia(b)}>Finalizar suplencia</button>}
+                  </div></td>
+                </tr>)}
+                {!bloques.length && <tr><td colSpan={7} className="empty">No hay materias asignadas para el año activo.</td></tr>}</tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {tab === "mails" && (

@@ -11,13 +11,14 @@ import { api } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import type { Bloque, FasePlanilla, Nota } from "@/lib/types";
 
-const ORDEN_FASES: FasePlanilla[] = ["BIM_1", "BIM_2", "FINAL_1", "BIM_3", "BIM_4", "FINAL_2", "CIERRE_1", "CIERRE_2", "CIERRE_3", "CALIF_DEF"];
+const ORDEN_FASES: FasePlanilla[] = ["BIM_1", "BIM_2", "FINAL_1", "BIM_3", "BIM_4", "FINAL_2", "CIERRE_ANUAL", "CIERRE_1", "CIERRE_2", "CALIF_DEF"];
 
 function faseDeNota(nota: Nota): FasePlanilla | null {
   if (nota.tipo === "BIM" && nota.numPer >= 1 && nota.numPer <= 4) return `BIM_${nota.numPer}` as FasePlanilla;
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 1) return "FINAL_1";
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 2) return "FINAL_2";
   if (nota.tipo === "FINAL" && nota.numPer === 3) return "CALIF_DEF";
+  if (nota.tipo === "CIERRE_ANUAL") return "CIERRE_ANUAL";
   if (nota.tipo === "DIC") return "CIERRE_1";
   if (nota.tipo === "FEB" && nota.numPer === 1) return "CIERRE_2";
   if (nota.tipo === "FEB" && nota.numPer === 2) return "CIERRE_3";

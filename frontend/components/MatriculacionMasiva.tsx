@@ -90,8 +90,8 @@ export default function MatriculacionMasiva({ cursos, anioInicial }: { cursos: C
   return <section className="panel matriculation-panel">
     <div className="roster-heading"><div><h2>Matriculación y armado de cursos</h2><p className="card-meta">Elegí ciclo y curso; incorporá alumnos sin asignación o administrá la nómina actual.</p></div></div>
     {err && <div className="alert alert-error">{err}</div>}{ok && <Toast message={ok} onClose={() => setOk("")}/>}
-    <div className="matriculation-selectors"><label>Ciclo lectivo<input type="number" min="2020" max="2100" value={anio} onChange={e => { setAnio(Number(e.target.value)); setPageDisponibles(0); setPageInscriptos(0); }}/></label><label>Curso destino<select value={cursoId} onChange={e => { setCursoId(e.target.value); setPageDisponibles(0); setPageInscriptos(0); }}>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)} · {label(c.esp)}</option>)}</select></label></div>
-    {selectedCourse && <p className="matriculation-target">Destino seleccionado: <strong>{cursoLabel(selectedCourse.etiqueta)} · {label(selectedCourse.esp)} · {label(selectedCourse.turno)}</strong></p>}
+    <div className="matriculation-selectors"><label>Ciclo lectivo<input type="number" min="2020" max="2100" value={anio} onChange={e => { setAnio(Number(e.target.value)); setPageDisponibles(0); setPageInscriptos(0); }}/></label><label>Curso destino<select value={cursoId} onChange={e => { setCursoId(e.target.value); setPageDisponibles(0); setPageInscriptos(0); }}>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)}</option>)}</select></label></div>
+    {selectedCourse && <p className="matriculation-target">Destino seleccionado: <strong>{cursoLabel(selectedCourse.etiqueta)} · {label(selectedCourse.turno)}</strong></p>}
 
     {cursoId ? <div className="transfer-layout">
       <div className="transfer-list">

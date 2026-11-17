@@ -17,9 +17,9 @@ const ETAPAS = [
   { fase: "BIM_3", titulo: "3° Bimestre" },
   { fase: "BIM_4", titulo: "4° Bimestre" },
   { fase: "FINAL_2", titulo: "FINAL · 2° Cuatrimestre" },
-  { fase: "CIERRE_1", titulo: "1° Cierre · Diciembre" },
-  { fase: "CIERRE_2", titulo: "2° Cierre · Febrero" },
-  { fase: "CIERRE_3", titulo: "3° Cierre · Marzo" },
+  { fase: "CIERRE_ANUAL", titulo: "Cierre anual · Marzo–noviembre" },
+  { fase: "CIERRE_1", titulo: "Cierre · Diciembre" },
+  { fase: "CIERRE_2", titulo: "Cierre · Febrero" },
   { fase: "CALIF_DEF", titulo: "Calif. Def." },
 ];
 
@@ -28,6 +28,7 @@ function faseNota(nota: Nota) {
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 1) return "FINAL_1";
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 2) return "FINAL_2";
   if (nota.tipo === "FINAL" && nota.numPer === 3) return "CALIF_DEF";
+  if (nota.tipo === "CIERRE_ANUAL") return "CIERRE_ANUAL";
   if (nota.tipo === "DIC") return "CIERRE_1";
   if (nota.tipo === "FEB" && nota.numPer === 1) return "CIERRE_2";
   if (nota.tipo === "FEB" && nota.numPer === 2) return "CIERRE_3";

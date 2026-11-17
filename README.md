@@ -171,6 +171,21 @@ CREATE DATABASE sgn_db;
 
 ### Paso 2: Configurar el Backend
 
+Ingrese al directorio `backend/`. Copie `.env.example` como `.env` y configure las variables allí. El backend carga ese archivo al iniciarse; también puede definir las variables en el entorno del sistema.
+
+Para Gmail, use `lunamgoncalvesguerreiro@gmail.com` en `SPRING_MAIL_USERNAME` y `SGN_MAIL_FROM`, y pegue la **contraseña de aplicación** de Google en `SPRING_MAIL_PASSWORD`. No es la contraseña normal de Gmail. El archivo `backend/.env` está excluido de Git; no publique esa clave ni la pegue en el código.
+
+Si ejecuta el backend desde una terminal de PowerShell en la carpeta `backend`, otra opción es definir las variables antes de iniciarlo:
+
+```powershell
+$env:SPRING_MAIL_USERNAME = "lunamgoncalvesguerreiro@gmail.com"
+$env:SPRING_MAIL_PASSWORD = "<CONTRASENA_DE_APLICACION>"
+$env:SGN_MAIL_FROM = "lunamgoncalvesguerreiro@gmail.com"
+mvn spring-boot:run
+```
+
+El token de acceso dura cinco horas. Cinco minutos antes de vencer, el sistema permite renovar la sesión; si no se renueva, vuelve a pedir el ingreso.
+
 Ingrese al directorio:
 
 ```text

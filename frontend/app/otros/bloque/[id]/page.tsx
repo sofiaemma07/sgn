@@ -34,7 +34,7 @@ export default function OtrosBloquePage() {
           <Link href="/otros">← Volver</Link>
         </p>
         {err && <div className="alert alert-error">{err}</div>}
-        <div className="field" style={{ maxWidth: "320px", marginBottom: "1rem" }}>
+        <div className="field other-student-selector">
           <label htmlFor="field-1">Alumno</label>
           <select id="field-1" value={sel} onChange={(e) => setSel(e.target.value)}>
             <option value="">Seleccionar...</option>

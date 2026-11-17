@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 
 
 public final class NotaReglas {
+    private static final BigDecimal NOTA_MINIMA_APROBACION = BigDecimal.valueOf(6);
 
     private NotaReglas() {}
 
@@ -12,6 +13,9 @@ public final class NotaReglas {
     public static void validarVal(BigDecimal val) {
         if (val == null || val.compareTo(BigDecimal.ONE) < 0 || val.compareTo(BigDecimal.TEN) > 0) {
             throw new IllegalArgumentException("La nota debe estar entre 1 y 10");
+        }
+        if (val.stripTrailingZeros().scale() > 2) {
+            throw new IllegalArgumentException("La nota puede tener como máximo dos decimales");
         }
     }
 
@@ -27,7 +31,15 @@ public final class NotaReglas {
 
 
     public static boolean enProceso(BigDecimal val) {
-        return val != null && val.compareTo(BigDecimal.valueOf(6)) < 0;
+        return desaprobada(val);
+    }
+
+    public static boolean aprobada(BigDecimal val) {
+        return val != null && val.compareTo(NOTA_MINIMA_APROBACION) >= 0;
+    }
+
+    public static boolean desaprobada(BigDecimal val) {
+        return val != null && val.compareTo(NOTA_MINIMA_APROBACION) < 0;
     }
 
 

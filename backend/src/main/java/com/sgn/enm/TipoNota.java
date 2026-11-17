@@ -6,6 +6,7 @@ public enum TipoNota {
     BIM,
     DIC,
     FEB,
+    CIERRE_ANUAL,
     CUAT,
     FINAL
 }

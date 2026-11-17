@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Toast from "@/components/Toast";
 import Shell from "@/components/Shell";
@@ -8,7 +8,7 @@ import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
 import type { Reporte } from "@/lib/types";
 
-export default function ReportesProfPage() {
+function ReportesProfContent() {
   const searchParams = useSearchParams();
   const reporteId = Number(searchParams.get("reporteId")) || null;
   const [items, setItems] = useState<Reporte[]>([]);
@@ -144,4 +144,8 @@ export default function ReportesProfPage() {
       </Shell>
     </Guard>
   );
+}
+
+export default function ReportesProfPage() {
+  return <Suspense fallback={<main className="page"><p className="empty">Cargando reportes…</p></main>}><ReportesProfContent /></Suspense>;
 }

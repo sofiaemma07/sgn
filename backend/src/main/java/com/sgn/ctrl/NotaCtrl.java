@@ -70,6 +70,13 @@ public List<BloqueRes> misBloques() {
         return srv.planillaCompleta(id, me());
     }
 
+    @PostMapping("/planilla/confirmar")
+    @PreAuthorize("hasRole('PROFESOR')")
+    public MsgRes confirmarPlanilla(@RequestBody ConfirmarPlanillaReq req) {
+        srv.confirmarPlanilla(req, me());
+        return new MsgRes("Confirmación registrada; se actualizó el estado de la fase");
+    }
+
     @GetMapping("/bloques/{id}/boletin/publicacion")
     @PreAuthorize("hasAnyRole('OFICINA','ADMIN')")
     public BoletinPublicacionRes estadoPublicacion(@PathVariable long id) {

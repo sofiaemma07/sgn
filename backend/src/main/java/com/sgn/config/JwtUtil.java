@@ -52,6 +52,10 @@ public class JwtUtil {
         return parse(token).get("legajo", String.class);
     }
 
+    public long expiresAt(String token) {
+        return parse(token).getExpiration().getTime();
+    }
+
     private Claims parse(String token) {
         return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }

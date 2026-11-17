@@ -32,13 +32,15 @@ public class AvisoSrv {
     private final AvisoRepo avisoRepo;
     private final UsuarioRepo usuarioRepo;
     private final FaseCargaRepo faseRepo;
+    private final MailSrv mailSrv;
 
     @Value("${sgn.anio-activo:2026}") private int anioActivo;
 
-    public AvisoSrv(AvisoRepo avisoRepo, UsuarioRepo usuarioRepo, FaseCargaRepo faseRepo) {
+    public AvisoSrv(AvisoRepo avisoRepo, UsuarioRepo usuarioRepo, FaseCargaRepo faseRepo, MailSrv mailSrv) {
         this.avisoRepo = avisoRepo;
         this.usuarioRepo = usuarioRepo;
         this.faseRepo = faseRepo;
+        this.mailSrv = mailSrv;
     }
 
     @Transactional(readOnly = true)
@@ -92,10 +94,13 @@ public class AvisoSrv {
     public void reporteNuevo(Reporte reporte) {
         Nota nota = reporte.getNota();
         String periodo = periodo(nota);
-        crear(nota.getBloque().getProf(), "REPORTE:" + reporte.getId() + ":DOCENTE",
-            "Nueva solicitud de revisión", "El alumno " + reporte.getAlumno().nomCompleto()
+        String mensaje = "El alumno " + reporte.getAlumno().nomCompleto()
                 + " ha solicitado una revisión de nota en " + nota.getBloque().getMateria().getNom()
-                + " — " + periodo + ".", "/profesor/reportes?reporteId=" + reporte.getId(), nota.getBloque().getMateria().getNom(), periodo, null);
+                + " — " + periodo + ".";
+        nota.getBloque().profesoresActivos().forEach(docente -> crear(docente,
+            "REPORTE:" + reporte.getId() + ":DOCENTE:" + docente.getLegajo(),
+            "Nueva solicitud de revisión", mensaje, "/profesor/reportes?reporteId=" + reporte.getId(),
+            nota.getBloque().getMateria().getNom(), periodo, null));
     }
 
     @Transactional
@@ -159,7 +164,7 @@ public class AvisoSrv {
     public void recordarVencimientosCierres() {
         LocalDate hoy = LocalDate.now(ZONA);
         for (FaseCarga fase : faseRepo.findByAnioOrderById(anioActivo)) {
-            if (!List.of(FasePlanilla.CIERRE_1, FasePlanilla.CIERRE_2, FasePlanilla.CIERRE_3).contains(fase.getFase())) continue;
+            if (!List.of(FasePlanilla.CIERRE_ANUAL, FasePlanilla.CIERRE_1, FasePlanilla.CIERRE_2).contains(fase.getFase())) continue;
             long dias = java.time.temporal.ChronoUnit.DAYS.between(hoy, fase.getHasta());
             if (dias < 0 || dias > 3) continue;
             String nombre = fase.getFase().etiqueta();
@@ -192,6 +197,9 @@ public class AvisoSrv {
         aviso.setSolicitudId(solicitudId);
         aviso.setClaveEvento(clave.length() > 240 ? clave.substring(0, 240) : clave);
         avisoRepo.save(aviso);
+        mailSrv.enviar(usuario.getMail(), "SGN - " + titulo,
+            "Hola " + usuario.nomCompleto() + ",\n\n" + mensaje
+                + "\n\nIngresá al Sistema de Gestión de Notas para ver más información.");
     }
 
     private String periodo(Nota nota) {

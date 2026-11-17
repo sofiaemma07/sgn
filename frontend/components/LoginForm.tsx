@@ -1,11 +1,16 @@
 "use client";
 
 import { ThemeToggle } from "@/components/Theme";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { setSession } from "@/lib/auth";
 import { RUTAS, type Session, type TipoUsuario } from "@/lib/types";
+
+const CUIL_KEY = "sgn_last_cuil";
+function rememberedCuil() {
+  try { return localStorage.getItem(CUIL_KEY) || ""; } catch { return ""; }
+}
 
 export default function LoginForm() {
   const router = useRouter();
@@ -15,6 +20,8 @@ export default function LoginForm() {
   const [info, setInfo] = useState("");
   const [load, setLoad] = useState(false);
   const [recovering, setRecovering] = useState(false);
+
+  useEffect(() => { setIdent(rememberedCuil()); }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,14 +33,18 @@ export default function LoginForm() {
       const res = await api.login(ident.trim(), pass);
 
       const ses: Session = {
-        token: res.token,
         legajo: res.legajo,
         nom: res.nom,
         tipo: res.tipo as TipoUsuario,
         primerIngreso: res.primerIngreso,
+        expiresAt: res.expiresAt,
       };
 
       setSession(ses);
+      const cuilDigits = ident.replace(/\D/g, "");
+      if (/^\d{11}$/.test(cuilDigits)) {
+        try { localStorage.setItem(CUIL_KEY, cuilDigits); } catch {}
+      }
 
       if (res.primerIngreso) {
         router.replace("/cambiar-password");

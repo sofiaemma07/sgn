@@ -9,11 +9,11 @@ export type TipoUsuario =
 export type EstadoAlumno = "ACTIVO" | "CON_PASE" | "EGRESADO" | "SUSPENDIDO";
 
 export interface Session {
-  token: string;
   legajo: string;
   nom: string;
   tipo: TipoUsuario;
   primerIngreso: boolean;
+  expiresAt: number;
 }
 
 export interface Perfil {
@@ -34,6 +34,12 @@ export interface Bloque {
   cursoId: number;
   curso: string;
   anio: number;
+  docenteLegajo?: string;
+  docente?: string;
+  segundoDocenteLegajo?: string | null;
+  segundoDocente?: string | null;
+  modalidad?: "INDIVIDUAL" | "SUPLENCIA" | "CONJUNTA";
+  suplenciaActiva?: boolean;
 }
 
 export interface Alumno {
@@ -56,11 +62,15 @@ export interface Nota {
   borrador?: boolean;
 }
 
-export type FasePlanilla = "BIM_1" | "BIM_2" | "FINAL_1" | "BIM_3" | "BIM_4" | "FINAL_2" | "CUAT_1" | "CUAT_2" | "CIERRE_1" | "CIERRE_2" | "CIERRE_3" | "CALIF_DEF";
+export type FasePlanilla = "BIM_1" | "BIM_2" | "FINAL_1" | "BIM_3" | "BIM_4" | "FINAL_2" | "CUAT_1" | "CUAT_2" | "CIERRE_ANUAL" | "CIERRE_1" | "CIERRE_2" | "CIERRE_3" | "CALIF_DEF";
 export interface FaseInfo { fase: FasePlanilla; etiqueta: string; desde: string | null; hasta: string | null; habilitada: boolean }
+export type ConvocatoriaPrevia = "AGOSTO" | "DICIEMBRE";
+export interface RendicionPrevia { convocatoria: ConvocatoriaPrevia; anio: number; nota: number; fecha: string; aprobada: boolean }
+export interface MateriaPrevia { id: number; legajo: string; alumno: string; bloqueId: number; materia: string; curso: string; anioOrigen: number; aprobada: boolean; rendiciones: RendicionPrevia[] }
+export interface ConvocatoriaPreviaInfo { convocatoria: ConvocatoriaPrevia; anio: number; desde: string | null; hasta: string | null }
 export interface PlanillaFila { legajo: string; alumno: string; val: string; notaId: number | null; borrador: boolean }
 export interface Planilla { bloqueId: number; materia: string; curso: string; anio: number; fase: FasePlanilla; estado: string; desde: string | null; hasta: string | null; alumnos: PlanillaFila[] }
-export interface PlanillaFase { fase: FasePlanilla; etiqueta: string; referencia: string; desde: string | null; hasta: string | null; estado: string }
+export interface PlanillaFase { fase: FasePlanilla; etiqueta: string; referencia: string; desde: string | null; hasta: string | null; estado: string; confirmados: string[] }
 export interface PlanillaAlumno { legajo: string; alumno: string; notas: Record<string, string> }
 export interface PlanillaCompleta { bloqueId: number; materia: string; curso: string; anio: number; fases: PlanillaFase[]; alumnos: PlanillaAlumno[] }
 

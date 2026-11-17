@@ -6,19 +6,19 @@ import { useParams } from "next/navigation";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import Toast from "@/components/Toast";
-import { api } from "@/lib/api";
-import { cursoLabel } from "@/lib/presentation";
+import { api, currentLegajo } from "@/lib/api";
+import { cursoLabel, notaDesaprobada } from "@/lib/presentation";
 import type { Bloque, FasePlanilla, PlanillaCompleta, PlanillaFase } from "@/lib/types";
 
 const COLUMNAS: { fase: FasePlanilla; titulo: string }[] = [
   { fase: "BIM_1", titulo: "1° Bimestre" }, { fase: "BIM_2", titulo: "2° Bimestre" },
   { fase: "FINAL_1", titulo: "FINAL" }, { fase: "BIM_3", titulo: "3° Bimestre" },
   { fase: "BIM_4", titulo: "4° Bimestre" }, { fase: "FINAL_2", titulo: "FINAL" },
-  { fase: "CIERRE_1", titulo: "1° Cierre" }, { fase: "CIERRE_2", titulo: "2° Cierre" },
-  { fase: "CIERRE_3", titulo: "3° Cierre" }, { fase: "CALIF_DEF", titulo: "Calif. Def." },
+  { fase: "CIERRE_ANUAL", titulo: "Cierre anual" }, { fase: "CIERRE_1", titulo: "Diciembre" },
+  { fase: "CIERRE_2", titulo: "Febrero" }, { fase: "CALIF_DEF", titulo: "Definitiva" },
 ];
 type GradeMap = Record<string, Record<string, string>>;
-const ESTADO: Record<string, string> = { ABIERTA: "Abierta", CERRADA: "Entregada", PROGRAMADA: "Próxima", VENCIDA: "Vencida", SIN_FECHAS: "Sin fechas" };
+const ESTADO: Record<string, string> = { ABIERTA: "Abierta", CERRADA: "Entregada", PROGRAMADA: "Próxima", VENCIDA: "Vencida", SIN_FECHAS: "Sin fechas", AUTOMATICA: "Automática" };
 function csvCell(v: string) { return `"${v.replaceAll('"', '""')}"`; }
 
 export default function PlanillaDocente() {
@@ -31,6 +31,7 @@ export default function PlanillaDocente() {
   const [ok, setOk] = useState("");
   const [saving, setSaving] = useState("");
   const [confirmPhase, setConfirmPhase] = useState<FasePlanilla | null>(null);
+  const [legajoActual, setLegajoActual] = useState("");
 
   const load = useCallback(async () => {
     if (!bloqueId) return;
@@ -47,7 +48,7 @@ export default function PlanillaDocente() {
     } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo cargar la planilla"); }
   }, [bloqueId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLegajoActual(currentLegajo()); load(); }, [load]);
 
   function setGrade(fase: FasePlanilla, legajo: string, val: string) {
     setData(prev => ({ ...prev, [fase]: { ...prev[fase], [legajo]: val } }));
@@ -72,35 +73,68 @@ export default function PlanillaDocente() {
   }
 
   function failed(value: string | undefined) {
-    if (!value) return false;
-    const normalized = value.trim().toUpperCase();
-    if (normalized === "EP" || normalized === "EN PROCESO") return true;
-    const grade = Number(normalized);
-    return Number.isFinite(grade) && grade <= 6;
-  }
-
-  function passed(value: string | undefined) {
-    if (!value) return false;
-    const grade = Number(value.trim());
-    return Number.isFinite(grade) && grade > 6;
+    return notaDesaprobada(value);
   }
 
   function eligible(fase: FasePlanilla, legajo: string) {
     if (faseInfo(fase)?.estado !== "ABIERTA") return false;
     switch (fase) {
-      case "CIERRE_1": return faseInfo("FINAL_2")?.estado === "CERRADA" && failed(data.FINAL_2?.[legajo]);
+      case "CIERRE_ANUAL": return faseInfo("FINAL_1")?.estado === "CERRADA" && faseInfo("FINAL_2")?.estado === "CERRADA";
+      case "CIERRE_1": return faseInfo("CIERRE_ANUAL")?.estado === "CERRADA" && failed(data.CIERRE_ANUAL?.[legajo]);
       case "CIERRE_2": return faseInfo("CIERRE_1")?.estado === "CERRADA" && failed(data.CIERRE_1?.[legajo]);
-      case "CIERRE_3": return faseInfo("CIERRE_2")?.estado === "CERRADA" && failed(data.CIERRE_2?.[legajo]);
-      case "CALIF_DEF": return (faseInfo("FINAL_2")?.estado === "CERRADA" && passed(data.FINAL_2?.[legajo]))
-        || (faseInfo("CIERRE_1")?.estado === "CERRADA" && passed(data.CIERRE_1?.[legajo]))
-        || (faseInfo("CIERRE_2")?.estado === "CERRADA" && passed(data.CIERRE_2?.[legajo]))
-        || (faseInfo("CIERRE_3")?.estado === "CERRADA" && passed(data.CIERRE_3?.[legajo]));
+      case "CIERRE_3": case "CALIF_DEF": return false;
       default: return true;
     }
   }
 
   function hasEligible(fase: FasePlanilla) {
     return !!sheet?.alumnos.some(a => eligible(fase, a.legajo));
+  }
+
+  function hasUnsavedChanges(fase: FasePlanilla) {
+    return !!sheet?.alumnos.some(a => gradeInputValue(data[fase]?.[a.legajo]) !== gradeInputValue(a.notas[fase]));
+  }
+
+  function faseConfirmadaPor(fase: FasePlanilla, legajo: string) {
+    return faseInfo(fase)?.confirmados?.includes(legajo) || false;
+  }
+
+  function ambosConfirmaron(fase: FasePlanilla) {
+    const confirmados = faseInfo(fase)?.confirmados || [];
+    if (!bloque?.docenteLegajo || !bloque.segundoDocenteLegajo) return false;
+    return confirmados.includes(bloque.docenteLegajo) && confirmados.includes(bloque.segundoDocenteLegajo);
+  }
+
+  function nombresConfirmados(fase: FasePlanilla) {
+    const confirmados = faseInfo(fase)?.confirmados || [];
+    return [
+      bloque?.docenteLegajo && confirmados.includes(bloque.docenteLegajo) ? bloque.docente : null,
+      bloque?.segundoDocenteLegajo && confirmados.includes(bloque.segundoDocenteLegajo) ? bloque.segundoDocente : null,
+    ].filter(Boolean).join(", ") || "Ninguno todavía";
+  }
+
+  async function confirmar(fase: FasePlanilla) {
+    if (!sheet || saving) return;
+    if (hasUnsavedChanges(fase)) {
+      setErr("Guardá tus cambios antes de confirmar las calificaciones.");
+      return;
+    }
+    setSaving(`confirmar-${fase}`); setErr(""); setOk("");
+    try {
+      const actual = await api.planillaCompleta(bloqueId);
+      const anterior = sheet.alumnos.map(a => `${a.legajo}:${gradeInputValue(a.notas[fase])}`).join("|");
+      const vigente = actual.alumnos.map(a => `${a.legajo}:${gradeInputValue(a.notas[fase])}`).join("|");
+      if (anterior !== vigente) {
+        setSheet(actual);
+        setData(Object.fromEntries(COLUMNAS.map(c => [c.fase,
+          Object.fromEntries(actual.alumnos.map(a => [a.legajo, gradeInputValue(a.notas[c.fase])]))])));
+        throw new Error("Otro docente actualizó las calificaciones. Revisá la versión guardada y confirmala nuevamente.");
+      }
+      await api.confirmarPlanilla(bloqueId, fase);
+      setOk("Confirmación registrada para esta versión de la planilla.");
+      await load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo confirmar la planilla"); }
+    finally { setSaving(""); }
   }
 
   function incompleteStudents(fase: FasePlanilla) {
@@ -177,8 +211,11 @@ export default function PlanillaDocente() {
       <div className="sheet-ident">
         <p className="card-meta no-print"><Link href="/profesor">← Volver a materias</Link></p>
         <p className="card-meta sheet-course-meta">MATERIA: <strong>{sheet?.materia}</strong> · CURSO: <strong>{cursoLabel(sheet?.curso || "")}</strong></p>
+        {bloque?.modalidad === "CONJUNTA" && <p className="card-meta">Docencia compartida: {bloque.docente} y {bloque.segundoDocente}.</p>}
+        {bloque?.modalidad === "SUPLENCIA" && <p className="card-meta">{bloque.suplenciaActiva ? `Suplencia activa de ${bloque.docente}.` : `Suplencia finalizada; titular: ${bloque.docente}.`}</p>}
       </div>
       <div className="btn-row sheet-actions no-print">
+        {bloque?.modalidad === "CONJUNTA" && <button className="btn" onClick={() => void load()} disabled={!!saving}>Actualizar planilla</button>}
         <button className="btn" onClick={download} disabled={!sheet?.alumnos.length}>Descargar CSV</button>
         <button className="btn btn-primary" disabled={!!saving || !sheet?.fases.some(f => faseInfo(f.fase)?.estado === "ABIERTA" && hasEligible(f.fase))} onClick={saveOpenDrafts}>
           {saving === "todas" ? "Guardando…" : "Guardar borradores abiertos"}
@@ -187,7 +224,7 @@ export default function PlanillaDocente() {
     </div>
     {err && <div className="alert alert-error">{err}</div>}
     {ok && <Toast message={ok} onClose={() => setOk("")} />}
-    <p className="card-meta no-print">En las fases habilitadas seleccioná una nota entera del 1 al 10, EP, NI o NC. Las fases abiertas se indican en verde; las entregadas no se pueden editar.</p>
+    <p className="card-meta no-print">En las fases habilitadas seleccioná una nota entera del 1 al 10, EP, NI o NC. El cierre anual se habilita después de entregar ambos cuatrimestres; diciembre y febrero solo aparecen para quienes desaprobaron la instancia anterior. La definitiva se genera al aprobar una de ellas.{bloque?.modalidad === "CONJUNTA" && " Ambos docentes comparten esta planilla y deben confirmar las calificaciones guardadas para poder entregar cada fase."}</p>
     <div className="table-wrap grade-sheet-wrap">
       <table className="data grade-sheet">
         <thead>
@@ -200,7 +237,15 @@ export default function PlanillaDocente() {
               {fase?.referencia && <small className="phase-month">{fase.referencia}</small>}
               <small className="phase-date">{fase?.desde && fase?.hasta ? `Cargar y entregar hasta ${fase.hasta}` : "Sin fechas: Oficina debe definir el plazo"}</small>
               <small className={`phase-state phase-${fase?.estado?.toLowerCase() || "cargando"}`}>{ESTADO[fase?.estado || ""] || "Cargando"}</small>
-              {abierta && hasEligible(c.fase) && <button className="phase-close no-print" disabled={!!saving} onClick={() => requestClose(c.fase)}>{saving === c.fase ? "…" : "Entregar fase"}</button>}
+              {abierta && hasEligible(c.fase) && bloque?.modalidad === "CONJUNTA" && <>
+                <small className="phase-state">Confirmaciones: {fase?.confirmados?.length || 0}/2</small>
+                <small className="phase-state">Confirmaron: {nombresConfirmados(c.fase)}</small>
+                <button className="phase-close no-print" disabled={!!saving || faseConfirmadaPor(c.fase, legajoActual) || hasUnsavedChanges(c.fase)} onClick={() => void confirmar(c.fase)}>
+                  {saving === `confirmar-${c.fase}` ? "Confirmando…" : faseConfirmadaPor(c.fase, legajoActual) ? "Ya confirmaste" : "Confirmar calificaciones"}
+                </button>
+                {hasUnsavedChanges(c.fase) && <small className="phase-state">Guardá antes de confirmar</small>}
+              </>}
+              {abierta && hasEligible(c.fase) && <button className="phase-close no-print" disabled={!!saving || (bloque?.modalidad === "CONJUNTA" && !ambosConfirmaron(c.fase))} onClick={() => requestClose(c.fase)}>{saving === c.fase ? "…" : bloque?.modalidad === "CONJUNTA" && !ambosConfirmaron(c.fase) ? "Esperando a ambos" : "Entregar fase"}</button>}
             </th>;
           })}</tr>
         </thead>

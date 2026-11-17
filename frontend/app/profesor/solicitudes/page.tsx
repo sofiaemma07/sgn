@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import SolicitudesTable from "@/components/SolicitudesTable";
 import Shell from "@/components/Shell";
@@ -8,7 +8,7 @@ import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
 import type { Solicitud } from "@/lib/types";
 
-export default function ProfSolPage() {
+function ProfSolContent() {
   const searchParams = useSearchParams();
   const solicitudId = Number(searchParams.get("solicitudId")) || null;
   const [items, setItems] = useState<Solicitud[]>([]);
@@ -32,4 +32,8 @@ export default function ProfSolPage() {
       </Shell>
     </Guard>
   );
+}
+
+export default function ProfSolPage() {
+  return <Suspense fallback={<main className="page"><p className="empty">Cargando solicitudes…</p></main>}><ProfSolContent /></Suspense>;
 }

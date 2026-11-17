@@ -32,7 +32,12 @@ public class Curso {
             case TARDE -> "Tarde";
             case NOCHE -> "Noche";
         };
-        return anio + "° " + div + "ª · Turno " + turnoVisible;
+        String ciclo = anio <= 2 ? "Ciclo Básico" : switch (esp) {
+            case AUTOMOTORES -> "Automotores";
+            case COMPUTACION -> "Computación";
+            case CICLO_BASICO -> "Ciclo Básico";
+        };
+        return anio + "° " + div + "ª · Turno " + turnoVisible + " · " + ciclo;
     }
 
     public Long getId() { return id; }

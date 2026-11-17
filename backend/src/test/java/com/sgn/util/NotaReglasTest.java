@@ -13,6 +13,10 @@ class NotaReglasTest {
         assertTrue(NotaReglas.enProceso(new BigDecimal("5.99")));
         assertFalse(NotaReglas.enProceso(new BigDecimal("6.00")));
         assertFalse(NotaReglas.enProceso(new BigDecimal("10")));
+        assertTrue(NotaReglas.aprobada(new BigDecimal("6.00")));
+        assertFalse(NotaReglas.aprobada(new BigDecimal("5.99")));
+        assertTrue(NotaReglas.desaprobada(new BigDecimal("5.99")));
+        assertFalse(NotaReglas.desaprobada(new BigDecimal("6.00")));
     }
 
     @Test

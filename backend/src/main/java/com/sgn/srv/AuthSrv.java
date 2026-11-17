@@ -111,8 +111,19 @@ return new LoginRes(
     u.getLegajo(),
     u.nomCompleto(),
     u.getTipo(),
-    u.isPrimerIngreso()
+    u.isPrimerIngreso(),
+    jwt.expiresAt(token)
 );
+    }
+
+    @Transactional(readOnly = true)
+    public LoginRes renovar(String mail) {
+        Usuario u = repo.findByMail(mail)
+            .filter(Usuario::isActivo)
+            .orElseThrow(() -> new BadCredentialsException("Usuario inactivo o inexistente"));
+        String token = jwt.gen(u.getMail(), u.getLegajo(), u.getTipo().name());
+        return new LoginRes(token, u.getLegajo(), u.nomCompleto(), u.getTipo(),
+            u.isPrimerIngreso(), jwt.expiresAt(token));
     }
 
 @Transactional

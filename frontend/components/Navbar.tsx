@@ -9,6 +9,7 @@ import { label } from "@/lib/presentation";
 import type { TipoUsuario } from "@/lib/types";
 import { ThemeToggle } from "@/components/Theme";
 import NotificationsMenu from "@/components/NotificationsMenu";
+import { api } from "@/lib/api";
 
 interface LinkItem {
   href: string;
@@ -30,12 +31,14 @@ const NAV: Partial<Record<TipoUsuario, LinkItem[]>> = {
     { href: "/oficina/fases", label: "Fechas de carga" },
     { href: "/oficina/alumnos", label: "Alumnos" },
     { href: "/oficina/notas", label: "Notas" },
+    { href: "/oficina/previas", label: "Previas" },
     { href: "/oficina/auditoria", label: "Historial" },
   ],
   ADMIN: [
     { href: "/admin", label: "Administración" },
     { href: "/oficina", label: "Solicitudes" },
     { href: "/oficina/fases", label: "Fechas de carga" },
+    { href: "/oficina/previas", label: "Previas" },
     { href: "/oficina/auditoria", label: "Auditoría" },
   ],
   PRECEPTOR: [{ href: "/otros", label: "Consultar notas" }],
@@ -84,7 +87,8 @@ export default function Navbar() {
     );
   }
 
-  function salir() {
+  async function salir() {
+    try { await api.cerrarSesion(); } catch {}
     clearSession();
     router.replace("/login");
   }

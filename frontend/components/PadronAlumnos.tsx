@@ -138,14 +138,14 @@ export default function PadronAlumnos({ cursos, anioInicial }: { cursos: Curso[]
       <label>Apellido<input required value={alta.ape} onChange={e => setAlta({ ...alta, ape: e.target.value })}/></label>
       <label>Segundo apellido<input value={alta.ape2} onChange={e => setAlta({ ...alta, ape2: e.target.value })}/></label>
       <label>Correo electrónico<input required type="email" value={alta.mail} onChange={e => setAlta({ ...alta, mail: e.target.value })}/></label>
-      <label>Correo de tutor<input type="email" value={alta.mailTutor} onChange={e => setAlta({ ...alta, mailTutor: e.target.value })}/></label>
+      <label>Correo de tutor<input required type="email" value={alta.mailTutor} onChange={e => setAlta({ ...alta, mailTutor: e.target.value })}/></label>
       <div className="roster-create-actions"><button className="btn btn-primary" disabled={saving}>{saving ? "Guardando…" : "Crear alumno"}</button></div>
     </form>}
 
     <div className="roster-filters">
       <label className="roster-search">Buscar en todo el padrón<input type="search" placeholder="Nombre, apellido, legajo o correo" value={q} onChange={e => setQ(e.target.value)}/></label>
       <label>Ciclo lectivo<input type="number" min="2020" max="2100" value={anio} onChange={e => { setAnio(Number(e.target.value)); setPage(0); }}/></label>
-      <label>Curso / división<select value={cursoId} onChange={e => { setCursoId(e.target.value); setPage(0); }}><option value="">Todos los cursos</option><option value="-1">Sin curso asignado</option>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)} · {label(c.esp)}</option>)}</select></label>
+      <label>Curso / división<select value={cursoId} onChange={e => { setCursoId(e.target.value); setPage(0); }}><option value="">Todos los cursos</option><option value="-1">Sin curso asignado</option>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)}</option>)}</select></label>
       <label>Turno<select value={turno} onChange={e => { setTurno(e.target.value); setPage(0); }}><option value="">Todos</option>{[...new Set(cursos.map(c => c.turno))].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label>
       <label>Especialidad<select value={especialidad} onChange={e => { setEspecialidad(e.target.value); setPage(0); }}><option value="">Todas</option>{[...new Set(cursos.map(c => c.esp))].map(v => <option key={v} value={v}>{label(v)}</option>)}</select></label>
       <label>Estado<select value={estado} onChange={e => { setEstado(e.target.value); setPage(0); }}><option value="">Todos</option>{ESTADOS.map(s => <option key={s.value} value={s.value}>{s.title}</option>)}</select></label>
@@ -159,7 +159,7 @@ export default function PadronAlumnos({ cursos, anioInicial }: { cursos: Curso[]
       <button type="button" className="btn btn-sm" onClick={exportarSeleccionados}>Exportar seleccionados CSV</button>
       <button type="button" className="btn btn-sm" onClick={() => setSelected([])}>Quitar selección</button>
     </div>}
-    {assignOpen && <div className="roster-assign-box"><label>Curso destino<select value={assignCurso} onChange={e => setAssignCurso(e.target.value)}>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)} · {label(c.esp)}</option>)}</select></label><button type="button" className="btn btn-primary" disabled={saving || !assignCurso} onClick={asignarSeleccionados}>{saving ? "Asignando…" : `Asignar ${selected.length} alumnos`}</button><button type="button" className="btn" onClick={() => setAssignOpen(false)}>Cancelar</button></div>}
+    {assignOpen && <div className="roster-assign-box"><label>Curso destino<select value={assignCurso} onChange={e => setAssignCurso(e.target.value)}>{cursos.map(c => <option key={c.id} value={c.id}>{cursoLabel(c.etiqueta)}</option>)}</select></label><button type="button" className="btn btn-primary" disabled={saving || !assignCurso} onClick={asignarSeleccionados}>{saving ? "Asignando…" : `Asignar ${selected.length} alumnos`}</button><button type="button" className="btn" onClick={() => setAssignOpen(false)}>Cancelar</button></div>}
 
     <div className="roster-table-meta"><span>{loading ? "Buscando alumnos…" : `Mostrando ${first}–${last} de ${(result?.total || 0).toLocaleString("es-AR")} alumnos`}</span><label>Por página<select value={size} onChange={e => { setSize(Number(e.target.value)); setPage(0); }}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label></div>
     <div className="table-wrap roster-table-wrap"><table className="data roster-table"><thead><tr><th><input aria-label="Seleccionar alumnos visibles" type="checkbox" checked={allVisibleSelected} onChange={toggleVisible}/></th><th>Legajo</th><th>Apellido y nombre</th><th>Correo electrónico</th><th>Curso</th><th>Turno / especialidad</th><th>Estado</th></tr></thead>

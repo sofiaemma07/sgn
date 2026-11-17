@@ -4,6 +4,7 @@ import com.sgn.dto.Dtos.*;
 import com.sgn.ent.*;
 import com.sgn.enm.Esp;
 import com.sgn.enm.EstadoAlumno;
+import com.sgn.enm.ModalidadBloque;
 import com.sgn.enm.TipoUsr;
 import com.sgn.enm.Turno;
 import com.sgn.repo.*;
@@ -25,19 +26,21 @@ public class UsuarioSrv {
     private final CursoRepo cursoRepo;
     private final MateriaRepo matRepo;
     private final BloqueRepo bloqueRepo;
+    private final ConfirmacionPlanillaRepo confirmacionRepo;
     private final InscripcionRepo inscRepo;
     private final PasswordEncoder enc;
     private final NotificacionRepo notifRepo;
     private final MailSrv mailSrv;
 
     public UsuarioSrv(UsuarioRepo repo, CursoRepo cursoRepo, MateriaRepo matRepo,
-                  BloqueRepo bloqueRepo, InscripcionRepo inscRepo,
+                  BloqueRepo bloqueRepo, ConfirmacionPlanillaRepo confirmacionRepo, InscripcionRepo inscRepo,
                   PasswordEncoder enc, NotificacionRepo notifRepo,
                   MailSrv mailSrv) {
         this.repo = repo;
         this.cursoRepo = cursoRepo;
         this.matRepo = matRepo;
         this.bloqueRepo = bloqueRepo;
+        this.confirmacionRepo = confirmacionRepo;
         this.inscRepo = inscRepo;
         this.enc = enc;
         this.notifRepo = notifRepo;
@@ -156,7 +159,7 @@ public class UsuarioSrv {
                 curso != null ? curso.getId() : null,
                 curso != null ? curso.etiqueta() : null,
                 curso != null ? curso.getTurno().name() : null,
-                curso != null ? curso.getEsp().name() : null);
+                curso != null ? especialidadCurso(curso).name() : null);
         }).toList();
     }
 
@@ -181,6 +184,10 @@ public class UsuarioSrv {
 
 @Transactional
 public UsrRes crear(UsrReq req) {
+
+    if (req.tipo() == TipoUsr.ALUMNO && (req.mailTutor() == null || req.mailTutor().isBlank())) {
+        throw new IllegalArgumentException("El correo del tutor es obligatorio para dar de alta a un alumno");
+    }
 
     if (req.legajo() == null || req.legajo().isBlank()) {
         throw new IllegalArgumentException("Legajo obligatorio");
@@ -218,7 +225,7 @@ public UsrRes crear(UsrReq req) {
     u.setApe(req.ape());
     u.setApe2(req.ape2());
     u.setMail(req.mail().trim());
-    u.setMailTutor(req.mailTutor());
+    u.setMailTutor(req.mailTutor() != null ? req.mailTutor().trim() : null);
 
     String passwordTemporal = generarPasswordTemporal();
 
@@ -243,6 +250,10 @@ public UsrRes crear(UsrReq req) {
     @Transactional
     public UsrRes editar(String legajo, UsrReq req) {
         Usuario u = repo.findById(legajo).orElseThrow(() -> new NoSuchElementException("No encontrado"));
+        TipoUsr tipoFinal = req.tipo() != null ? req.tipo() : u.getTipo();
+        if (tipoFinal == TipoUsr.ALUMNO && (req.mailTutor() == null || req.mailTutor().isBlank())) {
+            throw new IllegalArgumentException("El correo del tutor es obligatorio para los alumnos");
+        }
         if (req.cuil() != null && !req.cuil().isBlank()) {
             NotaReglas.validarCuil(req.cuil());
             String cuil = req.cuil().replaceAll("[^0-9]", "");
@@ -263,7 +274,7 @@ public UsrRes crear(UsrReq req) {
             }
             u.setMail(req.mail());
         }
-        u.setMailTutor(req.mailTutor());
+        u.setMailTutor(req.mailTutor() != null ? req.mailTutor().trim() : null);
         if (req.pass() != null && !req.pass().isBlank()) u.setPass(enc.encode(req.pass()));
         if (req.tipo() != null) u.setTipo(req.tipo());
         return toRes(repo.save(u));
@@ -294,11 +305,25 @@ public UsrRes crear(UsrReq req) {
         Esp esp;
         try {
             turno = Turno.valueOf(req.turno());
-            esp = Esp.valueOf(req.esp());
         } catch (Exception e) {
-            throw new IllegalArgumentException("Turno o especialidad inválidos");
+            throw new IllegalArgumentException("Turno inválido");
         }
-        if (cursoRepo.findByAnioAndDivAndTurnoAndEsp(req.anio(), req.div(), turno, esp).isPresent()) {
+        if (req.anio() < 1 || req.anio() > 6 || req.div() < 1)
+            throw new IllegalArgumentException("El año debe estar entre 1° y 6° y la división debe ser mayor que cero");
+        if (req.anio() <= 2) {
+            esp = Esp.CICLO_BASICO;
+            if (!cursoRepo.findByAnioAndDivAndTurno(req.anio(), req.div(), turno).isEmpty())
+                throw new IllegalArgumentException("El curso de Ciclo Básico ya existe");
+        } else {
+            try {
+                esp = Esp.valueOf(req.esp());
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Seleccioná una especialidad válida para 3° a 6°");
+            }
+            if (esp == Esp.CICLO_BASICO)
+                throw new IllegalArgumentException("De 3° a 6° se debe seleccionar Computación o Automotores");
+        }
+        if (req.anio() > 2 && cursoRepo.findByAnioAndDivAndTurnoAndEsp(req.anio(), req.div(), turno, esp).isPresent()) {
             throw new IllegalArgumentException("El curso ya existe");
         }
         var c = new Curso();
@@ -376,9 +401,20 @@ public Inscripcion inscribir(InscReq req) {
 
     @Transactional
     public Bloque asignarBloque(BloqueReq req) {
+        if (req.profLegajo() == null || req.profLegajo().isBlank()) throw new IllegalArgumentException("Seleccioná un docente");
         Usuario prof = repo.findById(req.profLegajo())
             .orElseThrow(() -> new NoSuchElementException("Docente no encontrado"));
         if (prof.getTipo() != TipoUsr.PROFESOR) throw new IllegalArgumentException("Debe ser profesor");
+        ModalidadBloque modalidad = req.modalidad() == null ? ModalidadBloque.INDIVIDUAL : req.modalidad();
+        Usuario segundoProf = null;
+        if (modalidad != ModalidadBloque.INDIVIDUAL) {
+            if (req.segundoProfLegajo() == null || req.segundoProfLegajo().isBlank())
+                throw new IllegalArgumentException("Seleccioná el segundo docente");
+            segundoProf = repo.findById(req.segundoProfLegajo())
+                .orElseThrow(() -> new NoSuchElementException("Segundo docente no encontrado"));
+            if (segundoProf.getTipo() != TipoUsr.PROFESOR) throw new IllegalArgumentException("El segundo docente debe ser profesor");
+            if (segundoProf.getLegajo().equals(prof.getLegajo())) throw new IllegalArgumentException("Seleccioná dos docentes distintos");
+        }
         Materia m = matRepo.findById(req.materiaId()).orElseThrow(() -> new NoSuchElementException("Materia no encontrada"));
         Curso c = cursoRepo.findById(req.cursoId()).orElseThrow(() -> new NoSuchElementException("Curso no encontrado"));
         boolean dup = bloqueRepo.findByCursoIdAndAnio(c.getId(), req.anio()).stream()
@@ -388,8 +424,57 @@ public Inscripcion inscribir(InscReq req) {
         b.setMateria(m);
         b.setCurso(c);
         b.setProf(prof);
+        b.setSegundoProf(segundoProf);
+        b.setModalidad(modalidad);
+        b.setSuplenciaActiva(true);
         b.setAnio(req.anio());
         return bloqueRepo.save(b);
+    }
+
+    @Transactional
+    public Bloque editarBloque(long id, BloqueReq req) {
+        Bloque bloque = bloqueRepo.findById(id)
+            .orElseThrow(() -> new NoSuchElementException("Bloque no encontrado"));
+        if (req.profLegajo() == null || req.profLegajo().isBlank()) throw new IllegalArgumentException("Seleccioná un docente");
+        Usuario prof = repo.findById(req.profLegajo())
+            .orElseThrow(() -> new NoSuchElementException("Docente no encontrado"));
+        if (prof.getTipo() != TipoUsr.PROFESOR) throw new IllegalArgumentException("Debe ser profesor");
+        ModalidadBloque modalidad = req.modalidad() == null ? ModalidadBloque.INDIVIDUAL : req.modalidad();
+        Usuario segundoProf = null;
+        if (modalidad != ModalidadBloque.INDIVIDUAL) {
+            if (req.segundoProfLegajo() == null || req.segundoProfLegajo().isBlank())
+                throw new IllegalArgumentException("Seleccioná el segundo docente");
+            segundoProf = repo.findById(req.segundoProfLegajo())
+                .orElseThrow(() -> new NoSuchElementException("Segundo docente no encontrado"));
+            if (segundoProf.getTipo() != TipoUsr.PROFESOR) throw new IllegalArgumentException("El segundo docente debe ser profesor");
+            if (segundoProf.getLegajo().equals(prof.getLegajo())) throw new IllegalArgumentException("Seleccioná dos docentes distintos");
+        }
+        Materia materia = matRepo.findById(req.materiaId()).orElseThrow(() -> new NoSuchElementException("Materia no encontrada"));
+        Curso curso = cursoRepo.findById(req.cursoId()).orElseThrow(() -> new NoSuchElementException("Curso no encontrado"));
+        boolean dup = bloqueRepo.findByCursoIdAndAnio(curso.getId(), req.anio()).stream()
+            .anyMatch(b -> !b.getId().equals(id) && b.getMateria().getId().equals(materia.getId()));
+        if (dup) throw new IllegalArgumentException("Ya existe otro bloque para esa materia, curso y año");
+        boolean eraSuplencia = bloque.getModalidad() == ModalidadBloque.SUPLENCIA;
+        if (bloque.getModalidad() == ModalidadBloque.CONJUNTA || modalidad == ModalidadBloque.CONJUNTA)
+            confirmacionRepo.deleteByBloqueId(id);
+        bloque.setMateria(materia);
+        bloque.setCurso(curso);
+        bloque.setAnio(req.anio());
+        bloque.setProf(prof);
+        bloque.setSegundoProf(segundoProf);
+        bloque.setModalidad(modalidad);
+        if (modalidad == ModalidadBloque.SUPLENCIA && !eraSuplencia) bloque.setSuplenciaActiva(true);
+        if (modalidad != ModalidadBloque.SUPLENCIA) bloque.setSuplenciaActiva(false);
+        return bloqueRepo.save(bloque);
+    }
+
+    @Transactional
+    public void finalizarSuplencia(long bloqueId) {
+        Bloque bloque = bloqueRepo.findById(bloqueId)
+            .orElseThrow(() -> new NoSuchElementException("Bloque no encontrado"));
+        if (bloque.getModalidad() != ModalidadBloque.SUPLENCIA || !bloque.isSuplenciaActiva())
+            throw new IllegalStateException("El bloque no tiene una suplencia activa");
+        bloque.setSuplenciaActiva(false);
     }
 
     public List<MailRes> notificaciones() {
@@ -400,7 +485,11 @@ public Inscripcion inscribir(InscReq req) {
     }
 
     private CursoRes toCurso(Curso c) {
-        return new CursoRes(c.getId(), c.getAnio(), c.getDiv(), c.getTurno().name(), c.getEsp().name(), c.etiqueta());
+        return new CursoRes(c.getId(), c.getAnio(), c.getDiv(), c.getTurno().name(), especialidadCurso(c).name(), c.etiqueta());
+    }
+
+    private Esp especialidadCurso(Curso curso) {
+        return curso.getAnio() <= 2 ? Esp.CICLO_BASICO : curso.getEsp();
     }
     private String generarPasswordTemporal() {
 

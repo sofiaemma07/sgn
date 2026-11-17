@@ -80,10 +80,10 @@ export default function OficinaBloquePage() {
         {(bloque || planilla) && <p className="card-meta">Materia: {bloque?.materia || planilla?.materia}</p>}
         {err && <div className="alert alert-error">{err}</div>}
 
-        <section className="panel" style={{ marginBottom: "1rem" }}>
-          <div className="btn-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <section className="panel office-publication-panel">
+          <div className="btn-row office-publication-heading">
             <div>
-              <h2 style={{ margin: 0 }}>Boletín del curso</h2>
+              <h2 className="office-publication-title">Boletín del curso</h2>
               <p className="card-meta">{publicacion?.publicado ? `Publicado${publicacion.publicadoEn ? ` el ${publicacion.publicadoEn.slice(0, 10)}` : ""}. Los alumnos pueden leerlo.` : "Aún no publicado. Los alumnos no pueden acceder al PDF."}</p>
             </div>
             <button type="button" className={`btn ${publicacion?.publicado ? "" : "btn-primary"}`} disabled={!publicacion || savingPublicacion} onClick={cambiarPublicacion}>
@@ -92,7 +92,7 @@ export default function OficinaBloquePage() {
           </div>
         </section>
 
-        <div className="btn-row" style={{ marginBottom: "1rem" }}>
+        <div className="btn-row office-download-actions">
           <button type="button" className="btn btn-primary" onClick={descargarCurso} disabled={!planilla}>
             Descargar boletín del curso (PDF)
           </button>
@@ -106,7 +106,7 @@ export default function OficinaBloquePage() {
                   <th>#</th>
                   <th>Alumno/a</th>
                   {planilla.fases.map(f => <th key={f.fase} className={claseFase(f.fase)}>{f.etiqueta}</th>)}
-                  <th>Boletín individual</th>
+                  <th>Boletín</th>
                   <th></th>
                 </tr>
               </thead>
@@ -141,8 +141,8 @@ export default function OficinaBloquePage() {
         )}
 
         {sel && (
-          <section className="panel" style={{ marginTop: "1.25rem" }}>
-            <div className="btn-row" style={{ justifyContent: "space-between" }}>
+          <section className="panel office-student-detail">
+            <div className="btn-row office-publication-heading">
               <h2>{alumnos.find(a => a.legajo === sel)?.nomCompleto || "Detalle del alumno"}</h2>
               <button type="button" className="btn btn-sm" onClick={() => setSel("")}>Cerrar detalle</button>
             </div>

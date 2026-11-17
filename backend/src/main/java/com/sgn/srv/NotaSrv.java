@@ -35,22 +35,29 @@ public class NotaSrv {
     private final AuditoriaRepo audRepo;
     private final FaseCargaRepo faseRepo;
     private final PlanillaCierreRepo cierreRepo;
+    private final ConfirmacionPlanillaRepo confirmacionRepo;
     private final MailSrv mail;
     private final ObjectMapper mapper;
     private final AvisoSrv avisoSrv;
+    private final MateriaPreviaSrv materiaPreviaSrv;
 
     @Value("${sgn.anio-activo:2026}")
     private int anioAct;
 
     private static final List<FasePlanilla> FASES_INFORME = List.of(
         FasePlanilla.BIM_1, FasePlanilla.BIM_2, FasePlanilla.FINAL_1, FasePlanilla.BIM_3,
-        FasePlanilla.BIM_4, FasePlanilla.FINAL_2, FasePlanilla.CIERRE_1,
-        FasePlanilla.CIERRE_2, FasePlanilla.CIERRE_3, FasePlanilla.CALIF_DEF);
+        FasePlanilla.BIM_4, FasePlanilla.FINAL_2, FasePlanilla.CIERRE_ANUAL,
+        FasePlanilla.CIERRE_1, FasePlanilla.CIERRE_2, FasePlanilla.CALIF_DEF);
+    private static final List<FasePlanilla> FASES_CONFIGURABLES = FASES_INFORME.stream()
+        .filter(fase -> fase != FasePlanilla.CALIF_DEF).toList();
+    private static final List<FasePlanilla> CIERRES_APROBATORIOS = List.of(
+        FasePlanilla.CIERRE_ANUAL, FasePlanilla.CIERRE_1, FasePlanilla.CIERRE_2);
 
     public NotaSrv(NotaRepo notaRepo, BloqueRepo bloqueRepo, InscripcionRepo inscRepo,
                    SolicitudRepo solRepo, ReporteRepo repRepo, BoletinRepo bolRepo,
                    UsuarioRepo usrRepo, AuditoriaRepo audRepo, FaseCargaRepo faseRepo,
-                   PlanillaCierreRepo cierreRepo, MailSrv mail, ObjectMapper mapper, AvisoSrv avisoSrv) {
+                   PlanillaCierreRepo cierreRepo, ConfirmacionPlanillaRepo confirmacionRepo,
+                   MailSrv mail, ObjectMapper mapper, AvisoSrv avisoSrv, MateriaPreviaSrv materiaPreviaSrv) {
         this.notaRepo = notaRepo;
         this.bloqueRepo = bloqueRepo;
         this.inscRepo = inscRepo;
@@ -61,20 +68,26 @@ public class NotaSrv {
         this.audRepo = audRepo;
         this.faseRepo = faseRepo;
         this.cierreRepo = cierreRepo;
+        this.confirmacionRepo = confirmacionRepo;
         this.mail = mail;
         this.mapper = mapper;
         this.avisoSrv = avisoSrv;
+        this.materiaPreviaSrv = materiaPreviaSrv;
     }
 
     public int anioActivo() {
         return anioAct;
     }
 
+@Transactional(readOnly = true)
 public List<BloqueRes> bloquesProf(String legajo) {
-    return bloqueRepo.findByProfLegajoAndAnio(legajo, anioAct).stream()
+    Usuario docente = usrRepo.findById(legajo).orElse(null);
+    return bloqueRepo.findAll().stream()
+        .filter(b -> b.getAnio() == anioAct && b.puedeEditar(docente))
         .map(this::toBloque).toList();
 }
 
+    @Transactional(readOnly = true)
     public List<BloqueRes> bloquesVer() {
         return bloqueRepo.findAll().stream()
             .filter(b -> b.getAnio() == anioAct)
@@ -93,7 +106,7 @@ public List<BloqueRes> bloquesProf(String legajo) {
 
     public List<FaseInfo> fases(int anio) {
         LocalDate hoy = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
-        return FASES_INFORME.stream().map(f -> {
+        return FASES_CONFIGURABLES.stream().map(f -> {
             var cfg = configuracionFase(anio, f);
             return new FaseInfo(f, f.etiqueta(), cfg != null ? cfg.getDesde().toString() : null,
                 cfg != null ? cfg.getHasta().toString() : null,
@@ -105,8 +118,8 @@ public List<BloqueRes> bloquesProf(String legajo) {
     public FaseInfo configurarFase(int anio, FaseConfigReq req) {
         if (req.fase() == null || req.desde() == null || req.hasta() == null)
             throw new IllegalArgumentException("Completá fase y fechas");
-        if (!FASES_INFORME.contains(req.fase()))
-            throw new IllegalArgumentException("Los cuatrimestres se registran en la columna FINAL correspondiente");
+        if (!FASES_CONFIGURABLES.contains(req.fase()))
+            throw new IllegalArgumentException("La calificación definitiva se genera automáticamente al aprobar un cierre");
         LocalDate desde;
         LocalDate hasta;
         try { desde = LocalDate.parse(req.desde()); hasta = LocalDate.parse(req.hasta()); }
@@ -149,6 +162,37 @@ public List<BloqueRes> bloquesProf(String legajo) {
         return construirPlanillaCompleta(b, actor.getTipo() == TipoUsr.OFICINA || actor.getTipo() == TipoUsr.ADMIN);
     }
 
+    @Transactional
+    public void confirmarPlanilla(ConfirmarPlanillaReq req, Usuario profesor) {
+        Bloque b = bloque(req.bloqueId());
+        chkProf(b, profesor);
+        if (b.getModalidad() != ModalidadBloque.CONJUNTA)
+            throw new IllegalStateException("La confirmación de ambos docentes solo aplica a materias conjuntas");
+        if (!FASES_INFORME.contains(req.fase())) throw new IllegalArgumentException("Fase inválida");
+        verificarFaseAbierta(b, req.fase());
+        if (cierreRepo.findByBloqueIdAndFase(b.getId(), req.fase()).isPresent())
+            throw new IllegalStateException("La fase ya está entregada");
+        int habilitados = 0;
+        for (Inscripcion inscripcion : inscRepo.findByCursoIdAndAnio(b.getCurso().getId(), b.getAnio())) {
+            String legajo = inscripcion.getAlumno().getLegajo();
+            if (inscripcion.isActiva() && faseHabilitadaParaAlumno(b, req.fase(), legajo)) {
+                habilitados++;
+                Nota nota = buscarNotaFase(b.getId(), legajo, req.fase()).orElse(null);
+                if (nota == null || nota.getVal() == null && nota.getValorEspecial() == null)
+                    throw new IllegalStateException("Guardá la calificación de todos los alumnos habilitados antes de confirmar");
+            }
+        }
+        if (habilitados == 0) throw new IllegalStateException("Todavía no hay alumnos habilitados para esta fase");
+        ConfirmacionPlanilla confirmacion = confirmacionRepo
+            .findByBloqueIdAndFaseAndProfesorLegajo(b.getId(), req.fase(), profesor.getLegajo())
+            .orElseGet(ConfirmacionPlanilla::new);
+        confirmacion.setBloque(b);
+        confirmacion.setFase(req.fase());
+        confirmacion.setProfesor(profesor);
+        confirmacion.setConfirmadoEn(LocalDateTime.now());
+        confirmacionRepo.save(confirmacion);
+    }
+
     public List<PlanillaCompleta> planillasCursoParaBoletin(String legajo, int anio) {
         var inscripciones = inscRepo.findByAlumnoLegajoAndAnioAndActivaTrue(legajo, anio);
         if (inscripciones.isEmpty()) throw new NoSuchElementException("El alumno no tiene curso activo para este ciclo lectivo");
@@ -167,10 +211,15 @@ public List<BloqueRes> bloquesProf(String legajo) {
             .map(PlanillaCierre::getFase).collect(Collectors.toSet());
         List<PlanillaFase> fases = FASES_INFORME.stream().map(f -> {
             FaseCarga cfg = configuracionFase(configuradas, f);
-            String estado = cerradas.contains(f) ? "CERRADA" : cfg == null ? "SIN_FECHAS"
+            String estado = f == FasePlanilla.CALIF_DEF ? "AUTOMATICA"
+                : cerradas.contains(f) ? "CERRADA" : cfg == null ? "SIN_FECHAS"
                 : hoy.isBefore(cfg.getDesde()) ? "PROGRAMADA" : hoy.isAfter(cfg.getHasta()) ? "VENCIDA" : "ABIERTA";
+            List<String> confirmados = b.getModalidad() == ModalidadBloque.CONJUNTA
+                ? confirmacionRepo.findByBloqueIdAndFase(b.getId(), f).stream()
+                    .map(c -> c.getProfesor().getLegajo()).toList()
+                : List.of();
             return new PlanillaFase(f, f.etiqueta(), f.referencia(), cfg != null ? cfg.getDesde().toString() : null,
-                cfg != null ? cfg.getHasta().toString() : null, estado);
+                cfg != null ? cfg.getHasta().toString() : null, estado, confirmados);
         }).toList();
 
         Map<String, Map<FasePlanilla, Nota>> notasPorAlumno = new HashMap<>();
@@ -209,14 +258,31 @@ public List<BloqueRes> bloquesProf(String legajo) {
     public PlanillaRes guardarPlanilla(PlanillaReq req, Usuario prof, boolean cerrar) {
         Bloque b = bloque(req.bloqueId());
         chkProf(b, prof);
-        if (prof.getTipo() == TipoUsr.PROFESOR && !b.getProf().getLegajo().equals(prof.getLegajo()))
+        if (prof.getTipo() == TipoUsr.PROFESOR && !b.puedeEditar(prof))
             throw new AccessDeniedException("Sin acceso al bloque");
         if (!FASES_INFORME.contains(req.fase()))
             throw new IllegalArgumentException("Los cuatrimestres se informan en la columna FINAL correspondiente");
+        if (req.fase() == FasePlanilla.CALIF_DEF)
+            throw new IllegalArgumentException("La calificación definitiva se genera automáticamente al aprobar un cierre");
         verificarFaseAbierta(b, req.fase());
         if (cierreRepo.findByBloqueIdAndFase(b.getId(), req.fase()).isPresent())
             throw new IllegalStateException("La planilla ya está cerrada; solicitá una modificación a Oficina");
         var valores = req.notas() == null ? List.<PlanillaValor>of() : req.notas();
+        if (cerrar && b.getModalidad() == ModalidadBloque.CONJUNTA) {
+            Set<String> confirmados = new HashSet<>(confirmacionRepo.findByBloqueIdAndFase(b.getId(), req.fase()).stream()
+                .map(c -> c.getProfesor().getLegajo()).toList());
+            if (b.getSegundoProf() == null || !confirmados.contains(b.getProf().getLegajo())
+                || !confirmados.contains(b.getSegundoProf().getLegajo()))
+                throw new IllegalStateException("Los dos docentes deben confirmar las calificaciones guardadas antes de entregar la fase");
+            for (PlanillaValor valor : valores) {
+                if (!faseHabilitadaParaAlumno(b, req.fase(), valor.legajo())) continue;
+                String enviado = normalizarNotaPlanilla(valor.val());
+                String guardado = buscarNotaFase(b.getId(), valor.legajo(), req.fase())
+                    .map(this::valorVisible).orElse("");
+                if (!Objects.equals(enviado, guardado))
+                    throw new IllegalStateException("Las calificaciones cambiaron después de la confirmación. Guardá los cambios y pedí nuevamente la confirmación de ambos docentes");
+            }
+        }
         Set<String> legajos = new HashSet<>();
         for (PlanillaValor v : valores) {
             if (!legajos.add(v.legajo())) throw new IllegalArgumentException("Hay alumnos duplicados en la planilla");
@@ -246,9 +312,17 @@ public List<BloqueRes> bloquesProf(String legajo) {
                 ? EstNota.EN_PROCESO : EstNota.NORMAL); n.setCargadoPor(prof);
             if (n.getFecCarga() == null) n.setFecCarga(LocalDateTime.now());
             n.setFecMod(LocalDateTime.now()); n.setBorrador(true);
+            if (!Objects.equals(anteriorVisible, nuevoVisible) && b.getModalidad() == ModalidadBloque.CONJUNTA)
+                confirmacionRepo.deleteByBloqueIdAndFase(b.getId(), req.fase());
             n = notaRepo.save(n);
-            if (!Objects.equals(anteriorVisible, nuevoVisible)) auditar(prof, null, insc.getAlumno(), b.getMateria().getNom(),
-                anterior, nuevoValor, "Edición de borrador " + req.fase().etiqueta() + ": " + (anteriorVisible.isBlank() ? "(vacío)" : anteriorVisible) + " → " + (nuevoVisible.isBlank() ? "(vacío)" : nuevoVisible), "BORRADOR", "EN_BORRADOR");
+            if (!Objects.equals(anteriorVisible, nuevoVisible)) {
+                auditar(prof, null, insc.getAlumno(), b.getMateria().getNom(),
+                    anterior, nuevoValor, "Edición de borrador " + req.fase().etiqueta() + ": " + (anteriorVisible.isBlank() ? "(vacío)" : anteriorVisible) + " → " + (nuevoVisible.isBlank() ? "(vacío)" : nuevoVisible), "BORRADOR", "EN_BORRADOR");
+                mail.notaAlumno(insc.getAlumno().getMail(), insc.getAlumno().getMailTutor(),
+                    b.getMateria().getNom(), "Borrador " + req.fase().etiqueta() + " actualizado: "
+                        + (anteriorVisible.isBlank() ? "(sin nota previa)" : anteriorVisible) + " → "
+                        + (nuevoVisible.isBlank() ? "nota retirada" : nuevoVisible));
+            }
         }
         if (cerrar) {
             List<String> habilitados = inscRepo.findByCursoIdAndAnio(b.getCurso().getId(), b.getAnio()).stream()
@@ -267,6 +341,10 @@ public List<BloqueRes> bloquesProf(String legajo) {
             var cierre = new PlanillaCierre(); cierre.setBloque(b); cierre.setFase(req.fase());
             cierre.setCerradoPor(prof); cierre.setCerradoEn(LocalDateTime.now()); cierreRepo.save(cierre);
             filas.forEach(n -> {
+                if (CIERRES_APROBATORIOS.contains(req.fase()))
+                    recalcularDefinitiva(b, n.getAlumno(), prof);
+                if (req.fase() == FasePlanilla.CIERRE_2)
+                    materiaPreviaSrv.crearDesdeFebreroSiReprobo(n, prof);
                 auditarConTexto(prof, null, n.getAlumno(), b.getMateria().getNom(), req.fase().etiqueta(), null, n.getVal(), "",
                     valorVisible(n), "Entrega de notas: " + req.fase().etiqueta(), "CIERRE_PLANILLA", "CERRADA");
                 genBol(n);
@@ -285,6 +363,8 @@ public List<BloqueRes> bloquesProf(String legajo) {
 
     private void verificarFaseAbierta(Bloque b, FasePlanilla fase) {
         if (fase == null) throw new IllegalArgumentException("Seleccioná una fase");
+        if (fase == FasePlanilla.CALIF_DEF)
+            throw new IllegalStateException("La calificación definitiva se genera automáticamente al aprobar un cierre");
         var cfg = Optional.ofNullable(configuracionFase(b.getAnio(), fase))
             .orElseThrow(() -> new IllegalStateException("Oficina todavía no configuró las fechas de esta fase"));
         LocalDate hoy = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
@@ -351,22 +431,50 @@ public List<BloqueRes> bloquesProf(String legajo) {
 
     private boolean faseHabilitadaParaAlumno(Bloque bloque, FasePlanilla fase, String legajo) {
         return switch (fase) {
-            case CIERRE_1 -> faseCerrada(bloque, FasePlanilla.FINAL_2)
-                && notaDesaprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.FINAL_2).orElse(null));
+            case CIERRE_ANUAL -> faseCerrada(bloque, FasePlanilla.FINAL_1)
+                && faseCerrada(bloque, FasePlanilla.FINAL_2);
+            case CIERRE_1 -> faseCerrada(bloque, FasePlanilla.CIERRE_ANUAL)
+                && notaDesaprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_ANUAL).orElse(null));
             case CIERRE_2 -> faseCerrada(bloque, FasePlanilla.CIERRE_1)
                 && notaDesaprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_1).orElse(null));
-            case CIERRE_3 -> faseCerrada(bloque, FasePlanilla.CIERRE_2)
-                && notaDesaprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_2).orElse(null));
-            case CALIF_DEF -> (faseCerrada(bloque, FasePlanilla.FINAL_2)
-                    && notaAprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.FINAL_2).orElse(null)))
-                || (faseCerrada(bloque, FasePlanilla.CIERRE_1)
-                    && notaAprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_1).orElse(null)))
-                || (faseCerrada(bloque, FasePlanilla.CIERRE_2)
-                    && notaAprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_2).orElse(null)))
-                || (faseCerrada(bloque, FasePlanilla.CIERRE_3)
-                    && notaAprobada(buscarNotaFase(bloque.getId(), legajo, FasePlanilla.CIERRE_3).orElse(null)));
+            case CIERRE_3, CALIF_DEF -> false;
             default -> true;
         };
+    }
+
+    private void recalcularDefinitiva(Bloque bloque, Usuario alumno, Usuario actor) {
+        Nota origen = CIERRES_APROBATORIOS.stream()
+            .filter(fase -> faseCerrada(bloque, fase))
+            .map(fase -> buscarNotaFase(bloque.getId(), alumno.getLegajo(), fase).orElse(null))
+            .filter(this::notaAprobada)
+            .findFirst().orElse(null);
+        Nota definitiva = buscarNotaFase(bloque.getId(), alumno.getLegajo(), FasePlanilla.CALIF_DEF).orElse(null);
+        if (origen == null) {
+            if (definitiva != null) notaRepo.delete(definitiva);
+            return;
+        }
+        if (definitiva == null) definitiva = new Nota();
+        BigDecimal anterior = definitiva.getVal();
+        definitiva.setBloque(bloque);
+        definitiva.setAlumno(alumno);
+        definitiva.setTipo(TipoNota.FINAL);
+        definitiva.setNumPer(3);
+        definitiva.setFase(FasePlanilla.CALIF_DEF);
+        definitiva.setTitulo("Definitiva desde " + origen.getFase().etiqueta());
+        definitiva.setVal(origen.getVal());
+        definitiva.setValorEspecial(null);
+        definitiva.setEst(origen.getEst());
+        definitiva.setCargadoPor(actor);
+        definitiva.setBorrador(false);
+        if (definitiva.getFecCarga() == null) definitiva.setFecCarga(LocalDateTime.now());
+        definitiva.setFecMod(LocalDateTime.now());
+        definitiva = notaRepo.save(definitiva);
+        if (anterior == null || anterior.compareTo(definitiva.getVal()) != 0) {
+            auditar(actor, null, alumno, bloque.getMateria().getNom(), anterior, definitiva.getVal(),
+                "Calificación definitiva automática desde " + origen.getFase().etiqueta(),
+                "CALIFICACION_DEFINITIVA", "APROBADA");
+            genBol(definitiva);
+        }
     }
 
     private boolean faseCerrada(Bloque bloque, FasePlanilla fase) {
@@ -374,12 +482,12 @@ public List<BloqueRes> bloquesProf(String legajo) {
     }
 
     private boolean notaAprobada(Nota nota) {
-        return nota != null && nota.getVal() != null && nota.getVal().compareTo(BigDecimal.valueOf(6)) > 0;
+        return nota != null && NotaReglas.aprobada(nota.getVal());
     }
 
     private boolean notaDesaprobada(Nota nota) {
-        return nota != null && (("EP".equals(nota.getValorEspecial()) || "EN PROCESO".equals(nota.getValorEspecial()))
-            || (nota.getVal() != null && nota.getVal().compareTo(BigDecimal.valueOf(6)) <= 0));
+        return nota != null && (("EP".equals(nota.getValorEspecial()) || "EN PROCESO".equals(nota.getValorEspecial())
+            || "NI".equals(nota.getValorEspecial())) || NotaReglas.desaprobada(nota.getVal()));
     }
 
     private String visibleEspecial(String valor) {
@@ -391,6 +499,7 @@ public List<BloqueRes> bloquesProf(String legajo) {
             case BIM -> switch (periodo) { case 1 -> FasePlanilla.BIM_1; case 2 -> FasePlanilla.BIM_2; case 3 -> FasePlanilla.BIM_3; case 4 -> FasePlanilla.BIM_4; default -> null; };
             case CUAT -> null;
             case FINAL -> switch (periodo) { case 1 -> FasePlanilla.FINAL_1; case 2 -> FasePlanilla.FINAL_2; case 3 -> FasePlanilla.CALIF_DEF; default -> null; };
+            case CIERRE_ANUAL -> FasePlanilla.CIERRE_ANUAL;
             case DIC -> FasePlanilla.CIERRE_1;
             case FEB -> periodo == 1 ? FasePlanilla.CIERRE_2 : periodo == 2 ? FasePlanilla.CIERRE_3 : null;
             default -> null;
@@ -445,7 +554,7 @@ public List<BloqueRes> bloquesProf(String legajo) {
     public NotaRes cargar(NotaReq req, Usuario prof) {
         Bloque b = bloque(req.bloqueId());
         chkProf(b, prof);
-        if (prof.getTipo() == TipoUsr.PROFESOR && !b.getProf().getLegajo().equals(prof.getLegajo())) {
+        if (prof.getTipo() == TipoUsr.PROFESOR && !b.puedeEditar(prof)) {
             throw new AccessDeniedException("Sin acceso al bloque");
         }
         BigDecimal valorRedondeado = NotaReglas.redondearVal(req.val());
@@ -512,7 +621,7 @@ public List<BloqueRes> bloquesProf(String legajo) {
         String motivo = motivoObligatorio(req.motivo());
         Nota n = notaRepo.findById(req.notaId()).orElseThrow(() -> new NoSuchElementException("Nota no encontrada"));
         chkProf(n.getBloque(), prof);
-        if (prof.getTipo() == TipoUsr.PROFESOR && !n.getBloque().getProf().getLegajo().equals(prof.getLegajo())) {
+        if (prof.getTipo() == TipoUsr.PROFESOR && !n.getBloque().puedeEditar(prof)) {
             throw new AccessDeniedException("No puede modificar notas de otro docente");
         }
         if (n.isBorrador()) {
@@ -604,6 +713,8 @@ public List<BloqueRes> bloquesProf(String legajo) {
             ? EstNota.EN_PROCESO : EstNota.NORMAL);
         n.setFecMod(LocalDateTime.now());
         notaRepo.save(n);
+        if (CIERRES_APROBATORIOS.contains(faseDeNota(n)))
+            recalcularDefinitiva(n.getBloque(), n.getAlumno(), autorizo);
         s.setEst(EstSol.APLICADA);
         s.setAutorizo(autorizo);
         s.setFecRes(LocalDateTime.now());
@@ -612,8 +723,6 @@ public List<BloqueRes> bloquesProf(String legajo) {
             faseDeNota(n) != null ? faseDeNota(n).etiqueta() : "",
             ant, s.getValNuevo(), antVisible, valorVisible(n), s.getMotivo(), "APROBACION", EstSol.APLICADA.name());
         avisoSrv.solicitudResuelta(s, true, antVisible, valorVisible(n));
-        mail.notaAlumno(n.getAlumno().getMail(), n.getAlumno().getMailTutor(),
-            n.getBloque().getMateria().getNom(), "Modificada: " + valorVisible(n));
         if (n.getTipo() == TipoNota.BIM || n.getTipo() == TipoNota.CUAT || n.getTipo() == TipoNota.FINAL) {
             genBol(n);
         }
@@ -641,9 +750,11 @@ public List<BloqueRes> bloquesProf(String legajo) {
         r.setFecRep(LocalDateTime.now());
         r = repRepo.save(r);
         avisoSrv.reporteNuevo(r);
-        mail.enviar(n.getBloque().getProf().getMail(), "SGN - Reporte de error en nota",
-            "Alumno " + alum.nomCompleto() + " reportó error en " + n.getBloque().getMateria().getNom()
-                + "\nMotivo: " + motivo + "\nNota actual: " + fmtVal(n));
+        for (Usuario docente : n.getBloque().profesoresActivos()) {
+            mail.enviar(docente.getMail(), "SGN - Reporte de error en nota",
+                "Alumno " + alum.nomCompleto() + " reportó error en " + n.getBloque().getMateria().getNom()
+                    + "\nMotivo: " + motivo + "\nNota actual: " + fmtVal(n));
+        }
         return r;
     }
 
@@ -657,8 +768,10 @@ public List<BloqueRes> bloquesProf(String legajo) {
     }
 
     public List<RepRes> repProf(String legajo) {
-        return repRepo.findByNotaBloqueProfLegajoAndEst(legajo, EstRep.PENDIENTE)
-            .stream().map(this::toRep).toList();
+        Usuario docente = usrRepo.findById(legajo).orElse(null);
+        return repRepo.findByEstOrderByFecRepDesc(EstRep.PENDIENTE).stream()
+            .filter(r -> r.getNota().getBloque().puedeEditar(docente))
+            .map(this::toRep).toList();
     }
 
     @Transactional
@@ -704,7 +817,7 @@ public List<BloqueRes> bloquesProf(String legajo) {
 
     return bloqueRepo.findAll().stream()
         .filter(b -> b.getAnio() == anioAct && cursoIds.contains(b.getCurso().getId()))
-        .map(this::toBloque)
+        .map(this::toBloqueAlumno)
         .toList();
 }
 
@@ -868,8 +981,8 @@ if (!insc.isEmpty()) {
     }
 
     private Double puntajeActual(Map<FasePlanilla, Nota> notas) {
-        for (FasePlanilla fase : List.of(FasePlanilla.CALIF_DEF, FasePlanilla.CIERRE_3,
-                FasePlanilla.CIERRE_2, FasePlanilla.CIERRE_1, FasePlanilla.FINAL_2)) {
+        for (FasePlanilla fase : List.of(FasePlanilla.CALIF_DEF, FasePlanilla.CIERRE_2,
+                FasePlanilla.CIERRE_1, FasePlanilla.CIERRE_ANUAL, FasePlanilla.FINAL_2)) {
             if (notas.containsKey(fase)) return puntaje(notas.get(fase));
         }
         if (notas.containsKey(FasePlanilla.BIM_3) || notas.containsKey(FasePlanilla.BIM_4))
@@ -893,13 +1006,18 @@ if (!insc.isEmpty()) {
             && faseDeNota(n) != null && FASES_INFORME.contains(faseDeNota(n))
             && (n.getVal() != null || n.getValorEspecial() != null));
         if (!tieneCalificacionOficial) return "SIN_NOTAS";
-        return notas.stream()
+        boolean aprobada = notas.stream()
             .filter(n -> !n.isBorrador())
             .filter(n -> faseDeNota(n) == FasePlanilla.CALIF_DEF)
             .max(Comparator.comparing(n -> n.getFecMod() != null ? n.getFecMod() : n.getFecCarga()))
-            .filter(n -> n.getVal() != null && n.getVal().compareTo(BigDecimal.valueOf(6)) > 0)
-            .map(n -> "APROBADA")
-            .orElse("CURSANDO");
+            .filter(n -> NotaReglas.aprobada(n.getVal()))
+            .isPresent();
+        if (aprobada) return "APROBADA";
+        if (!notas.isEmpty() && materiaPreviaSrv.aprobada(
+            notas.get(0).getAlumno().getLegajo(), notas.get(0).getBloque().getId())) return "APROBADA";
+        boolean noAproboFebrero = notas.stream().filter(n -> !n.isBorrador())
+            .filter(n -> faseDeNota(n) == FasePlanilla.CIERRE_2).anyMatch(this::notaDesaprobada);
+        return noAproboFebrero ? "PREVIA" : "CURSANDO";
     }
 
     private EstNota calcEst(BigDecimal val) {
@@ -917,7 +1035,7 @@ if (!insc.isEmpty()) {
     private void chkProf(Bloque b, Usuario u) {
         if (u.getTipo() == TipoUsr.ADMIN || u.getTipo() == TipoUsr.OFICINA
             || u.getTipo() == TipoUsr.PRECEPTOR || u.getTipo() == TipoUsr.DIRECTIVO) return;
-        if (u.getTipo() == TipoUsr.PROFESOR && b.getProf().getLegajo().equals(u.getLegajo())) return;
+        if (b.puedeEditar(u)) return;
         throw new AccessDeniedException("Sin acceso al bloque");
     }
 
@@ -975,7 +1093,16 @@ private void chkAccesoNotas(Bloque b, Usuario u, String alumLeg) {
 
     private BloqueRes toBloque(Bloque b) {
         return new BloqueRes(b.getId(), b.titulo(), b.getMateria().getId(), b.getMateria().getNom(),
-            b.getCurso().getId(), b.getCurso().etiqueta(), b.getAnio());
+            b.getCurso().getId(), b.getCurso().etiqueta(), b.getAnio(), b.getProf().getLegajo(),
+            b.getProf().nomCompleto(), b.getSegundoProf() != null ? b.getSegundoProf().getLegajo() : null,
+            b.getSegundoProf() != null ? b.getSegundoProf().nomCompleto() : null,
+            b.getModalidad(), b.isSuplenciaActiva());
+    }
+
+    private BloqueRes toBloqueAlumno(Bloque b) {
+        return new BloqueRes(b.getId(), b.titulo(), b.getMateria().getId(), b.getMateria().getNom(),
+            b.getCurso().getId(), b.getCurso().etiqueta(), b.getAnio(), null, null, null, null,
+            ModalidadBloque.INDIVIDUAL, false);
     }
 
     private NotaRes toNota(Nota n) {

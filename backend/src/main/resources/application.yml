@@ -1,4 +1,8 @@
 spring:
+  profiles:
+    default: dev
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: sgn-backend
 
@@ -11,6 +15,7 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
@@ -33,11 +38,14 @@ server:
 sgn:
   jwt:
     secret: ${SGN_JWT_SECRET:sgn-dev-secret-key-change-in-production-min-256-bits-long-enough}
-    exp-ms: ${SGN_JWT_EXP_MS:86400000}
+    exp-ms: ${SGN_JWT_EXP_MS:18000000}
 
   mail:
     enabled: ${SGN_MAIL_ENABLED:true}
     from: ${SGN_MAIL_FROM:${SPRING_MAIL_USERNAME:${MAIL_USERNAME:notificaciones@sgn.local}}}
+
+  seed:
+    bootstrap-password: ${SGN_SEED_BOOTSTRAP_PASSWORD:1234}
 
   anio-activo: ${SGN_ANIO_ACTIVO:2026}
 

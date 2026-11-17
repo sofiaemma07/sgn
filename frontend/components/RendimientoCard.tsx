@@ -7,7 +7,8 @@ import Link from "next/link";
 export default function RendimientoCard({ rend, bloques }: { rend: Rendimiento; bloques: Bloque[] }) {
   const aprobadas = rend.materias.filter(m => m.est === "APROBADA").length;
   const sinNotas = rend.materias.filter(m => m.est === "SIN_NOTAS").length;
-  const enCurso = rend.materias.length - aprobadas - sinNotas;
+  const previas = rend.materias.filter(m => m.est === "PREVIA").length;
+  const enCurso = rend.materias.length - aprobadas - sinNotas - previas;
   const conNotas = rend.materias.some(m => m.pct > 0);
 
   return (
@@ -20,6 +21,7 @@ export default function RendimientoCard({ rend, bloques }: { rend: Rendimiento; 
           <div className="metric-summary">
             <span className="badge badge-ok">{aprobadas} {aprobadas === 1 ? "aprobada" : "aprobadas"}</span>
             <span className="badge badge-info">{enCurso} en curso</span>
+            {previas > 0 && <span className="badge badge-warn">{previas} {previas === 1 ? "previa" : "previas"}</span>}
             {sinNotas > 0 && <span className="badge badge-pend">{sinNotas} sin calificación</span>}
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Toast from "@/components/Toast";
 import SolicitudesTable from "@/components/SolicitudesTable";
@@ -9,7 +9,7 @@ import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
 import type { Solicitud } from "@/lib/types";
 
-export default function OficinaPage() {
+function OficinaContent() {
   const searchParams = useSearchParams();
   const solicitudId = Number(searchParams.get("solicitudId")) || null;
   const [items, setItems] = useState<Solicitud[]>([]);
@@ -46,7 +46,7 @@ export default function OficinaPage() {
     <Guard roles={["OFICINA", "ADMIN"]}>
       <Shell>
         <h1>Solicitudes de cambio</h1>
-        <div className="btn-row" style={{ marginBottom: "1rem" }}>
+        <div className="btn-row office-request-tabs">
           <button
             type="button"
             className={`tab ${!todas ? "active" : ""}`}
@@ -74,4 +74,8 @@ export default function OficinaPage() {
       </Shell>
     </Guard>
   );
+}
+
+export default function OficinaPage() {
+  return <Suspense fallback={<main className="page"><p className="empty">Cargando solicitudes…</p></main>}><OficinaContent /></Suspense>;
 }

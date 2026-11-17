@@ -4,11 +4,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sgn.enm.TipoUsr;
 import com.sgn.enm.EstadoAlumno;
 import com.sgn.enm.FasePlanilla;
+import com.sgn.enm.ModalidadBloque;
+import com.sgn.enm.ConvocatoriaPrevia;
 import jakarta.validation.constraints.NotBlank;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
 
 public final class Dtos {
 
@@ -25,8 +28,12 @@ public final class Dtos {
     String legajo,
     String nom,
     TipoUsr tipo,
-    boolean primerIngreso
+    boolean primerIngreso,
+    long expiresAt
 ) {}
+    public record SesionRes(
+        String legajo, String nom, TipoUsr tipo, boolean primerIngreso, long expiresAt
+    ) {}
     public record PerfilRes(
         String legajo, String cuil, String nom, String mail, TipoUsr tipo,
         String curso, int anioLectivo
@@ -51,7 +58,9 @@ public final class Dtos {
     public record CursoReq(int anio, int div, String turno, String esp) {}
     public record MateriaRes(long id, String nom) {}
     public record MateriaReq(@NotBlank String nom) {}
-    public record BloqueRes(long id, String titulo, long materiaId, String materia, long cursoId, String curso, int anio) {}
+    public record BloqueRes(long id, String titulo, long materiaId, String materia, long cursoId, String curso, int anio,
+        String docenteLegajo, String docente, String segundoDocenteLegajo, String segundoDocente,
+        ModalidadBloque modalidad, boolean suplenciaActiva) {}
     public record AlumnoRes(String legajo, String nomCompleto) {}
     public record NotaRes(
         long id, String tipo, int numPer, String titulo, String val, String est,
@@ -68,7 +77,8 @@ public final class Dtos {
     public record FaseConfigReq(FasePlanilla fase, String desde, String hasta) {}
     public record PlanillaRes(long bloqueId, String materia, String curso, int anio,
         FasePlanilla fase, String estado, String desde, String hasta, List<PlanillaFila> alumnos) {}
-    public record PlanillaFase(FasePlanilla fase, String etiqueta, String referencia, String desde, String hasta, String estado) {}
+    public record PlanillaFase(FasePlanilla fase, String etiqueta, String referencia, String desde, String hasta,
+        String estado, List<String> confirmados) {}
     public record PlanillaAlumno(String legajo, String alumno, Map<String, String> notas) {}
     public record PlanillaCompleta(long bloqueId, String materia, String curso, int anio,
         List<PlanillaFase> fases, List<PlanillaAlumno> alumnos) {}
@@ -89,7 +99,15 @@ public final class Dtos {
     public record MateriaRend(String materia, double promNoOf, double pct, String est) {}
     public record PeriodoRend(String tipo, int numPer, double promNoOf) {}
     public record InscReq(String legajo, long cursoId, int anio) {}
-    public record BloqueReq(long materiaId, long cursoId, String profLegajo, int anio) {}
+    public record ConfirmarPlanillaReq(long bloqueId, FasePlanilla fase) {}
+    public record RendicionPreviaReq(ConvocatoriaPrevia convocatoria, int anio, BigDecimal nota, LocalDate fecha) {}
+    public record RendicionPreviaRes(ConvocatoriaPrevia convocatoria, int anio, BigDecimal nota,
+        LocalDate fecha, boolean aprobada) {}
+    public record PreviaRes(long id, String legajo, String alumno, long bloqueId, String materia,
+        String curso, int anioOrigen, boolean aprobada, List<RendicionPreviaRes> rendiciones) {}
+    public record ConvocatoriaPreviaInfo(ConvocatoriaPrevia convocatoria, int anio, String desde, String hasta) {}
+    public record BloqueReq(long materiaId, long cursoId, String profLegajo, int anio,
+        String segundoProfLegajo, ModalidadBloque modalidad) {}
     public record AudRes(
         long id, String actor, String autorizo, String alumno, String materia, String periodo,
         String valAnt, String valNuevo, String motivo, String accion, String est, String fec

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Shell from "@/components/Shell";
 import { Guard } from "@/components/Guard";
 import { api } from "@/lib/api";
-import type { Auditoria, Bloque, FasePlanilla, Nota } from "@/lib/types";
+import { notaAprobada } from "@/lib/presentation";
+import type { Auditoria, Bloque, FasePlanilla, MateriaPrevia, Nota } from "@/lib/types";
 
 const GUION = "—";
 
@@ -13,6 +14,7 @@ function faseDeNota(nota: Nota): FasePlanilla | null {
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 1) return "FINAL_1";
   if ((nota.tipo === "FINAL" || nota.tipo === "CUAT") && nota.numPer === 2) return "FINAL_2";
   if (nota.tipo === "FINAL" && nota.numPer === 3) return "CALIF_DEF";
+  if (nota.tipo === "CIERRE_ANUAL") return "CIERRE_ANUAL";
   if (nota.tipo === "DIC") return "CIERRE_1";
   if (nota.tipo === "FEB" && nota.numPer === 1) return "CIERRE_2";
   if (nota.tipo === "FEB" && nota.numPer === 2) return "CIERRE_3";
@@ -43,16 +45,16 @@ function notaMostrada(nota: Nota | undefined): string {
 
 function currentAndStatus(notas: Partial<Record<FasePlanilla, Nota>>) {
   const definitive = notas.CALIF_DEF;
-  const closing3 = notas.CIERRE_3;
   const closing2 = notas.CIERRE_2;
   const closing1 = notas.CIERRE_1;
+  const annualClose = notas.CIERRE_ANUAL;
   const secondFinal = notas.FINAL_2;
   const firstFinal = notas.FINAL_1;
 
-  const current = definitive || closing3 || closing2 || closing1 || secondFinal ||
+  const current = definitive || closing2 || closing1 || annualClose || secondFinal ||
     ((notas.BIM_3 || notas.BIM_4) ? undefined : firstFinal) || notas.BIM_4 || notas.BIM_3 || firstFinal || notas.BIM_2 || notas.BIM_1;
   let currentValue = notaMostrada(current);
-  if (!definitive && !closing3 && !closing2 && !closing1 && !secondFinal) {
+  if (!definitive && !closing2 && !closing1 && !annualClose && !secondFinal) {
     if (notas.BIM_3 || notas.BIM_4) {
       currentValue = average([notas.BIM_3?.val, notas.BIM_4?.val]);
       if (currentValue === GUION) currentValue = notaMostrada(notas.BIM_4 || notas.BIM_3);
@@ -62,15 +64,13 @@ function currentAndStatus(notas: Partial<Record<FasePlanilla, Nota>>) {
     }
   }
 
-  const settled = definitive || closing3 || closing2 || closing1 || secondFinal;
+  const settled = definitive || closing2 || closing1 || annualClose;
   const settledScore = numericValue(settled?.val);
   let status = "En curso";
-  if (settledScore !== null && settledScore > 6) status = "Aprobada";
-  else if (definitive) status = "Pendiente de acreditación";
-  else if (closing2 && settledScore !== null) status = "A período Mar";
+  if (notaAprobada(settledScore)) status = "Aprobada";
+  else if (closing2 && settledScore !== null) status = "Materia previa";
   else if (closing1 && settledScore !== null) status = "A período Feb";
-  else if (secondFinal && settledScore !== null && settledScore <= 6) status = "A período Dic";
-  else if (closing3 && settledScore !== null) status = "Pendiente de calificación definitiva";
+  else if (annualClose && settledScore !== null) status = "A período Dic";
 
   return { currentValue, status };
 }
@@ -79,12 +79,13 @@ export default function HistorialPage() {
   const [notas, setNotas] = useState<Nota[]>([]);
   const [materias, setMaterias] = useState<Bloque[]>([]);
   const [cambios, setCambios] = useState<Auditoria[]>([]);
+  const [previas, setPrevias] = useState<MateriaPrevia[]>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.historialAlumno(), api.cambiosAlumno(), api.materiasAlumno()])
-      .then(([n, c, m]) => { setNotas(n); setCambios(c); setMaterias(m); })
+    Promise.all([api.historialAlumno(), api.cambiosAlumno(), api.materiasAlumno(), api.previasMias()])
+      .then(([n, c, m, p]) => { setNotas(n); setCambios(c); setMaterias(m); setPrevias(p); })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -136,7 +137,7 @@ export default function HistorialPage() {
                 <tr>
                   <th>1° Bim.</th><th>2° Bim.</th><th>Nota cuatr.</th>
                   <th>3° Bim.</th><th>4° Bim.</th><th>Nota cuatr.</th>
-                  <th>Dic.</th><th>Feb.</th><th>Mar.</th><th>Promedio / actual</th><th>Estado</th>
+                  <th>Cierre anual</th><th>Dic.</th><th>Feb.</th><th>Definitiva / actual</th><th>Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,9 +152,9 @@ export default function HistorialPage() {
                     <td className={n.BIM_3 ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.BIM_3)}</td>
                     <td className={n.BIM_4 ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.BIM_4)}</td>
                     <td className={n.FINAL_2 ? "numeric tracking-term" : "numeric tracking-empty"}>{notaMostrada(n.FINAL_2)}</td>
+                    <td className={n.CIERRE_ANUAL ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.CIERRE_ANUAL)}</td>
                     <td className={n.CIERRE_1 ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.CIERRE_1)}</td>
                     <td className={n.CIERRE_2 ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.CIERRE_2)}</td>
-                    <td className={n.CIERRE_3 ? "numeric" : "numeric tracking-empty"}>{notaMostrada(n.CIERRE_3)}</td>
                     <td className="numeric tracking-current">{n.CALIF_DEF ? notaMostrada(n.CALIF_DEF) : currentValue}</td>
                     <td><span className={`tracking-status ${status === "Aprobada" ? "is-approved" : status.startsWith("A período") ? "is-pending" : "is-progress"}`}>{status}</span></td>
                   </tr>;
@@ -179,6 +180,20 @@ export default function HistorialPage() {
               <td>{c.motivo || GUION}</td><td>{c.autorizo || "Oficina de Alumnos"}</td>
             </tr>)}</tbody>
           </table></div> : <p className="empty">Todavía no hay rectificaciones oficiales en tu historial.</p>}
+        </section>
+
+        <section className="panel academic-changes-panel">
+          <div className="section-heading">
+            <div><h2>Materias previas</h2><p className="card-meta">Las mesas de previa se registran por separado y no modifican la calificación definitiva del ciclo en que cursaste la materia.</p></div>
+          </div>
+          {previas.length ? <div className="table-wrap"><table className="data academic-changes">
+            <thead><tr><th>Materia</th><th>Curso de origen</th><th>Estado</th><th>Rendiciones</th></tr></thead>
+            <tbody>{previas.map(p => <tr key={p.id}>
+              <td><strong>{p.materia}</strong></td><td>{p.curso} · {p.anioOrigen}</td>
+              <td><span className={`tracking-status ${p.aprobada ? "is-approved" : "is-pending"}`}>{p.aprobada ? "Aprobada" : "Pendiente"}</span></td>
+              <td>{p.rendiciones.length ? p.rendiciones.map((r, i) => <span className="change-period" key={`${r.anio}-${r.convocatoria}-${i}`}>{r.convocatoria === "AGOSTO" ? "Agosto" : "Diciembre"} {r.anio}: {r.nota} · {r.aprobada ? "aprobó" : "no aprobó"}</span>) : "Sin rendiciones registradas"}</td>
+            </tr>)}</tbody>
+          </table></div> : <p className="empty">No tenés materias previas pendientes.</p>}
         </section>
       </Shell>
     </Guard>

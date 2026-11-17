@@ -1,4 +1,4 @@
-import { authHeader, clearSession, getSession } from "./auth";
+import { clearSession, getSession } from "./auth";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -6,10 +6,10 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const isPublicAuthPath = path === "/api/auth/login" || path === "/api/auth/recuperar-password";
   const res = await fetch(`${BASE}${path}`, {
     cache: "no-store",
+    credentials: "include",
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      ...(isPublicAuthPath ? {} : authHeader()),
       ...(opts.headers || {}),
     },
   });
@@ -31,7 +31,7 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 export async function downloadPdf(path: string, filename: string) {
-  const res = await fetch(`${BASE}${path}`, { cache: "no-store", headers: { ...authHeader() } });
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store", credentials: "include" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     if (res.status === 401) {
@@ -52,15 +52,20 @@ export async function downloadPdf(path: string, filename: string) {
 export const api = {
   login: (ident: string, pass: string) =>
   req<{
-    token: string;
     legajo: string;
     nom: string;
     tipo: string;
     primerIngreso: boolean;
+    expiresAt: number;
   }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ ident, pass }),
   }),
+  renovarSesion: () => req<{
+    legajo: string; nom: string; tipo: string;
+    primerIngreso: boolean; expiresAt: number;
+  }>("/api/auth/renovar", { method: "POST" }),
+  cerrarSesion: () => req<void>("/api/auth/cerrar-sesion", { method: "POST" }),
   recuperarPassword: (ident: string) =>
     req<{ msg: string }>("/api/auth/recuperar-password", {
       method: "POST",
@@ -87,6 +92,7 @@ resetPassword: (legajo: string) =>
   guardarPlanilla: (body: object) => req<import("./types").Planilla>("/api/notas/planilla/borrador", { method: "PUT", body: JSON.stringify(body) }),
   guardarBorradores: (body: object) => req<{ msg: string }>("/api/notas/planilla/borradores", { method: "PUT", body: JSON.stringify(body) }),
   cerrarPlanilla: (body: object) => req<import("./types").Planilla>("/api/notas/planilla/cerrar", { method: "POST", body: JSON.stringify(body) }),
+  confirmarPlanilla: (bloqueId: number, fase: string) => req<{ msg: string }>("/api/notas/planilla/confirmar", { method: "POST", body: JSON.stringify({ bloqueId, fase }) }),
   notas: (bloqueId: number, legajo: string) =>
     req<import("./types").Nota[]>(`/api/notas/bloques/${bloqueId}/alumnos/${legajo}`),
   cargarNota: (body: object) =>
@@ -149,7 +155,7 @@ resetPassword: (legajo: string) =>
     req<import("./types").Usuario[]>(`/api/usuarios${tipo ? `?tipo=${tipo}` : ""}`),
   padronAlumnos: (params: URLSearchParams) => req<import("./types").PaginaAlumnos>(`/api/usuarios/alumnos/padron?${params.toString()}`),
   exportarPadronAlumnos: async (params: URLSearchParams) => {
-    const res = await fetch(`${BASE}/api/usuarios/alumnos/exportar.csv?${params.toString()}`, { cache: "no-store", headers: { ...authHeader() } });
+    const res = await fetch(`${BASE}/api/usuarios/alumnos/exportar.csv?${params.toString()}`, { cache: "no-store", credentials: "include" });
     if (!res.ok) throw new Error("No se pudo exportar el padrón");
     const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "padron-alumnos.csv"; a.click(); URL.revokeObjectURL(url);
   },
@@ -161,7 +167,7 @@ resetPassword: (legajo: string) =>
   matricularDisponibles: (body: object) => req<{ msg: string }>("/api/usuarios/matriculacion/asignar-disponibles", { method: "POST", body: JSON.stringify(body) }),
   retirarTodosCurso: (body: object) => req<{ msg: string }>("/api/usuarios/matriculacion/retirar-todos", { method: "POST", body: JSON.stringify(body) }),
   descargarBoletinesSeleccionados: async (legajos: string[]) => {
-    const res = await fetch(`${BASE}/api/usuarios/alumnos/boletines.zip`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() }, body: JSON.stringify({ legajos }) });
+    const res = await fetch(`${BASE}/api/usuarios/alumnos/boletines.zip`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ legajos }) });
     if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || "No se pudieron descargar los boletines"); }
     const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "boletines-alumnos.zip"; a.click(); URL.revokeObjectURL(url);
   },
@@ -192,6 +198,10 @@ resetPassword: (legajo: string) =>
       body: JSON.stringify(body),
     }),
   materias: () => req<import("./types").Materia[]>("/api/usuarios/materias"),
+  previas: () => req<import("./types").MateriaPrevia[]>("/api/previas"),
+  previasMias: () => req<import("./types").MateriaPrevia[]>("/api/previas/mias"),
+  convocatoriasPrevias: (anio: number) => req<import("./types").ConvocatoriaPreviaInfo[]>(`/api/previas/convocatorias?anio=${anio}`),
+  registrarRendicionPrevia: (id: number, body: object) => req<import("./types").RendicionPrevia>(`/api/previas/${id}/rendiciones`, { method: "POST", body: JSON.stringify(body) }),
   crearMateria: (body: object) =>
     req<import("./types").Materia>("/api/usuarios/materias", {
       method: "POST",
@@ -207,6 +217,10 @@ resetPassword: (legajo: string) =>
       method: "POST",
       body: JSON.stringify(body),
     }),
+  editarBloque: (bloqueId: number, body: object) =>
+    req<{ msg: string }>(`/api/usuarios/bloque/${bloqueId}`, { method: "PUT", body: JSON.stringify(body) }),
+  finalizarSuplencia: (bloqueId: number) =>
+    req<{ msg: string }>(`/api/usuarios/bloque/${bloqueId}/finalizar-suplencia`, { method: "PUT" }),
   notificaciones: () =>
     req<import("./types").MailLog[]>("/api/usuarios/notificaciones"),
 };

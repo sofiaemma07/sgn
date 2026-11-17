@@ -1,30 +1,30 @@
 :root {
   color-scheme: light;
-  --background: #f8fafc;
+  --background: #f3f4f6;
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --border: #e2e8f0;
-  --input-border: #64748b;
-  --primary: #0f2b5c;
-  --primary-hover: #163e7b;
-  --accent: #2563eb;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --surface-muted: #eceff1;
+  --border: #c8cdd2;
+  --input-border: #75808a;
+  --primary: #18385f;
+  --primary-hover: #102b4a;
+  --accent: #28527a;
+  --text-primary: #20262d;
+  --text-secondary: #424b54;
+  --text-muted: #68727c;
   --on-primary: #ffffff;
-  --success-bg: #dcfce7;
-  --success-text: #166534;
-  --info-bg: #e0f2fe;
-  --info-text: #075985;
-  --danger-bg: #fee2e2;
-  --danger-text: #991b1b;
-  --danger: #b91c1c;
-  --neutral-bg: #f1f5f9;
-  --neutral-text: #475569;
-  --focus: #2563eb;
-  --focus-ring: rgba(37, 99, 235, .2);
-  --shadow: 0 1px 2px rgba(15, 23, 42, .05);
-  --font-main: Inter, "Segoe UI", Arial, sans-serif;
+  --success-bg: #e6f0e8;
+  --success-text: #31583a;
+  --info-bg: #e7eef4;
+  --info-text: #294c6b;
+  --danger-bg: #f5e7e7;
+  --danger-text: #873737;
+  --danger: #a33d3d;
+  --neutral-bg: #eceff1;
+  --neutral-text: #424b54;
+  --focus: #28527a;
+  --focus-ring: rgba(40, 82, 122, .18);
+  --shadow: 0 1px 1px rgba(32, 38, 45, .04);
+  --font-main: Arial, "Segoe UI", sans-serif;
 }
 
 :root[data-theme="dark"] {
@@ -106,7 +106,7 @@ h4 {
   color: var(--text-primary);
   font-weight: 600;
   line-height: 1.3;
-  letter-spacing: -.02em;
+  letter-spacing: 0;
   margin: 0 0 1rem;
 }
 
@@ -1004,16 +1004,16 @@ table.grade-sheet thead th.phase-expired { background:var(--danger-bg)!important
 .phase-save-button { min-width:84px; white-space:nowrap; word-break:keep-all; }
 
 .page.office-grades-page { max-width:none; padding:1.5rem clamp(1rem, 2vw, 2.5rem); }
-.office-grades { min-width:1640px; table-layout:fixed; font-size:.82rem; }
+.office-grades { min-width:1900px; table-layout:fixed; font-size:.82rem; }
 .office-grades th, .office-grades td { padding:.38rem .55rem; line-height:1.2; }
 .office-grades th:nth-child(1), .office-grades td:nth-child(1) { width:42px; text-align:center; }
 .office-grades th:nth-child(2), .office-grades td:nth-child(2) { width:275px; }
 .office-grades .office-student-name { white-space:nowrap; overflow-wrap:normal; }
-.office-grades th:nth-child(n+3):nth-child(-n+12), .office-grades td:nth-child(n+3):nth-child(-n+12) { width:95px; text-align:center; }
+.office-grades th:nth-child(n+3):nth-child(-n+14), .office-grades td:nth-child(n+3):nth-child(-n+14) { width:95px; text-align:center; }
 .office-grades th.office-phase-wide, .office-grades td.office-phase-wide { width:140px; }
 .office-grades th.office-phase-def, .office-grades td.office-phase-def { width:155px; }
-.office-grades th:nth-child(13), .office-grades td:nth-child(13) { width:138px; }
-.office-grades th:nth-child(14), .office-grades td:nth-child(14) { width:110px; }
+.office-grades th:nth-last-child(2), .office-grades td:nth-last-child(2) { width:145px; white-space:nowrap; }
+.office-grades th:last-child, .office-grades td:last-child { width:115px; white-space:nowrap; }
 
 .toast button {
   border: 0;
@@ -1196,6 +1196,52 @@ table.grade-sheet thead th.phase-expired { background:var(--danger-bg)!important
 
 .section-heading .card-meta {
   margin: .35rem 0 0;
+}
+
+.previa-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.previa-header h1 { margin-bottom: .3rem; }
+.previa-header .card-meta { margin: 0; }
+.previa-year { display: grid; gap: .35rem; min-width: 9rem; color: var(--text-secondary); font-size: .85rem; font-weight: 500; }
+.previa-year input,
+.previa-register input,
+.previa-register select { min-width: 0; min-height: 42px; padding: .6rem .75rem; border: 1px solid var(--input-border); border-radius: 6px; background: var(--surface); color: var(--text-primary); }
+.previa-panel { padding: 1.25rem; }
+.previa-list { display: grid; gap: .85rem; }
+.previa-card { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.previa-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; background: var(--surface-muted); }
+.previa-card-heading h3 { margin: 0; color: var(--text-primary); font-size: 1rem; }
+.previa-card-heading p { margin: .25rem 0 0; color: var(--text-secondary); font-size: .875rem; }
+.previa-card-heading p span { color: var(--text-muted); }
+.previa-card-body { display: grid; grid-template-columns: minmax(10rem, .7fr) minmax(16rem, 1.3fr); gap: 1.25rem; padding: 1rem 1.1rem; }
+.previa-origin,
+.previa-history { display: grid; align-content: start; gap: .4rem; }
+.previa-origin > span,
+.previa-history > span { color: var(--text-muted); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .035em; }
+.previa-origin strong { color: var(--text-primary); font-size: .9rem; font-weight: 500; }
+.previa-history p { margin: 0; color: var(--text-secondary); font-size: .875rem; }
+.previa-register { display: grid; grid-template-columns: minmax(11rem, 1fr) minmax(11rem, .9fr) minmax(7rem, .5fr) auto; align-items: flex-end; gap: .75rem; padding: 1rem 1.1rem; border-top: 1px solid var(--border); }
+.previa-register label { display: grid; gap: .35rem; color: var(--text-secondary); font-size: .8rem; font-weight: 500; }
+.previa-register button { min-height: 42px; white-space: nowrap; }
+.previa-empty { display: grid; gap: .35rem; padding: 2rem 1rem; border: 1px dashed var(--border); border-radius: 8px; text-align: center; color: var(--text-primary); }
+.previa-empty span { color: var(--text-muted); font-size: .875rem; }
+
+@media (max-width: 850px) {
+  .previa-register { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .previa-register button { align-self: end; }
+}
+
+@media (max-width: 600px) {
+  .previa-header { align-items: stretch; flex-direction: column; gap: .75rem; }
+  .previa-year { max-width: 10rem; }
+  .previa-card-body { grid-template-columns: 1fr; gap: .8rem; }
+  .previa-register { grid-template-columns: 1fr; }
 }
 
 .tracking-count {
@@ -1391,7 +1437,7 @@ table.academic-changes .change-date {
   display: grid;
   grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(120px, 1fr)) auto;
   gap: .75rem;
-  align-items: end;
+  align-items: flex-end;
   padding: 1rem;
   margin-bottom: 1rem;
   border: 1px solid var(--border);
@@ -1450,7 +1496,7 @@ table.academic-changes .change-date {
   display: flex;
   flex-wrap: wrap;
   gap: .8rem;
-  align-items: end;
+  align-items: flex-end;
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1549,3 +1595,46 @@ table.academic-changes .change-date {
     align-items: center;
   }
 }
+.session-overlay { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:1rem; background:rgba(15,23,42,.48); }
+.session-dialog { width:min(440px,100%); padding:1.4rem; border:1px solid var(--border); border-radius:14px; background:var(--surface); color:var(--text-primary); box-shadow:0 20px 60px rgba(15,23,42,.28); }
+.session-dialog h2 { margin:0 0 .65rem; font-size:1.15rem; }
+.session-dialog p { margin:0; color:var(--text-secondary); line-height:1.5; }
+.session-actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:1.25rem; }
+
+/* Institutional visual treatment: plain surfaces, fine borders and limited depth. */
+.topbar { min-height: 72px; }
+.card,
+.panel,
+.login-box,
+.table-wrap,
+.notifications-panel,
+.confirm-dialog,
+.session-dialog,
+.roster-create-form,
+.transfer-list,
+.previa-card,
+.previa-empty { border-radius: 4px; box-shadow: none; }
+.btn,
+.field input,
+.field select,
+.field textarea,
+.roster-create-form input,
+.roster-filters input,
+.roster-filters select,
+.matriculation-selectors input,
+.matriculation-selectors select,
+.roster-assign-box select,
+.roster-table select,
+.previa-year input,
+.previa-register input,
+.previa-register select { border-radius: 3px; }
+.card.clickable:hover { box-shadow: none; }
+.nav-links>a { font-size: .875rem; }
+.brand { letter-spacing: 0; }
+.office-request-tabs,
+.office-download-actions { margin-bottom: 1rem; }
+.office-publication-panel { margin-bottom: 1rem; }
+.office-publication-heading { justify-content: space-between; align-items: center; }
+.office-publication-title { margin: 0; }
+.office-student-detail { margin-top: 1.25rem; }
+.other-student-selector { max-width: 320px; margin-bottom: 1rem; }

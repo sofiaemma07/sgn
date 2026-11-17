@@ -40,11 +40,8 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain chain
     ) throws ServletException, IOException {
 
-        var hdr = req.getHeader("Authorization");
-
-        if (hdr != null && hdr.startsWith("Bearer ")) {
-
-            var token = hdr.substring(7);
+        var token = token(req);
+        if (token != null) {
 
             try {
                 if (jwtUtil.valid(token)) {
@@ -89,6 +86,14 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(req, res);
+    }
+
+    private String token(HttpServletRequest req) {
+        var cookies = req.getCookies();
+        if (cookies == null) return null;
+        for (var cookie : cookies)
+            if ("SGN_SESSION".equals(cookie.getName())) return cookie.getValue();
+        return null;
     }
 
     private boolean esCambioPassword(HttpServletRequest req) {

@@ -24,7 +24,7 @@ public class Nota {
     private Usuario alumno;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 20)
     private TipoNota tipo;
 
     @Column(nullable = false)
